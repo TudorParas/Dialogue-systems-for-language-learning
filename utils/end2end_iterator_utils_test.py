@@ -48,13 +48,15 @@ class IteratorUtilsTest(tf.test.TestCase):
 
         source = iterator.source
         seq_len = iterator.source_sequence_length
+        diag_len = iterator.dialogue_length
         self.assertEqual([None, None, None], source.shape.as_list())
         self.assertEqual([None], seq_len.shape.as_list())
+        self.assertEqual([None], diag_len.shape.as_list())
         with self.test_session() as sess:
             sess.run(tf.tables_initializer())
             sess.run(iterator.initializer)
 
-            (src_eval, seq_len_eval) = sess.run((source, seq_len))
+            (src_eval, seq_len_eval, diag_len_eval) = sess.run((source, seq_len, diag_len))
 
             self.assertAllEqual(
                 [[[0, 1, 1],  # a b b, cut off because of utt_max_len
@@ -68,8 +70,12 @@ class IteratorUtilsTest(tf.test.TestCase):
                 [3, 2],  # a b b (because of utt_max_len) and a c
                 seq_len_eval
             )
+            self.assertAllEqual(
+                [2, 2],
+                diag_len_eval
+            )
 
-            (src_eval, seq_len_eval) = sess.run((source, seq_len))
+            (src_eval, seq_len_eval, diag_len_eval) = sess.run((source, seq_len, diag_len))
 
             self.assertAllEqual(
                 [[[0],  # a
@@ -80,6 +86,7 @@ class IteratorUtilsTest(tf.test.TestCase):
                 src_eval
             )
             self.assertAllEqual([1, 1], seq_len_eval)
+            self.assertAllEqual([2, 1], diag_len_eval)
 
 if __name__ == '__main__':
     tf.test.main()
