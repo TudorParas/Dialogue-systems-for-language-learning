@@ -22,15 +22,16 @@ import collections
 import tensorflow as tf
 
 
-class BatchedInput(collections.namedtuple("BatchedInput",
-                                          ("initializer",
-                                           "source",
-                                           "target_input",
-                                           "target_output",
-                                           "source_sequence_length",
-                                           "target_sequence_length",
-                                           "dialogue_length"))):  # ToDo: find a less confusing name
+class End2EndBatchedInput(collections.namedtuple("BatchedInput",
+                                                 ("initializer",
+                                                  "source",
+                                                  "target_input",
+                                                  "target_output",
+                                                  "source_sequence_length",
+                                                  "target_sequence_length",
+                                                  "dialogue_length"))):  # ToDo: find a less confusing name
     pass
+
 
 def get_infer_iterator(dataset, vocab_table, batch_size,
                        src_reverse, eos, eou, utt_max_len=None,
@@ -47,9 +48,11 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
     :param eos: The end of sentence string
     :param eou: End of utterance. This is the token which marks end of utterances in the input file
     :param utt_max_len: Maximum accepted length for utterance. Bigger inputs will be truncated.
-    :param dialogue_max_len: Maximum accepted length for the dialogue. bigger dialogs will be truncated.
+    :param dialogue_max_len: Maximum accepted length for the dialogue. Responses considered as well, for consistency
     """
 
+    # Make dialogue_max_len represent only how many user utterances there are
+    dialogue_max_len = dialogue_max_len // 2
     # We use the eos token to pad the data
     eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
     # Split the dialogs into individual utterances.
@@ -91,15 +94,16 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
     dataset = batching_func(dataset)
     iterator = dataset.make_initializable_iterator()
     (ids, utt_length, diag_len) = iterator.get_next()
-    return BatchedInput(
+    return End2EndBatchedInput(
         initializer=iterator.initializer,
-        source=ids,
+        source=ids,  # shape=[batch_size, dialogue_max_len, src_max_len]
         target_input=None,
         target_output=None,
-        source_sequence_length=utt_length,
+        source_sequence_length=utt_length,  # shape=[batch_size]
         target_sequence_length=None,
-        dialogue_length=diag_len
+        dialogue_length=diag_len  # shape=[batch_size]
     )
+
 
 def get_iterator(dataset,
                  vocab_table,
@@ -189,12 +193,12 @@ def get_iterator(dataset,
     # Create a tgt_input prefixed with <sos> and a tgt_output suffixed with <eos>.
     # We are going to use the pad value provided by tensorflow.
     dataset = dataset.map(lambda src, tgt: (src,
-                                            tf.pad(tgt,  # target input
-                                                   paddings=[[0, 0], [1, 0]],  # Pad one column before the matrix
-                                                   constant_values=sos_id),  # use this to pad
-                                            tf.pad(tgt,  # target output, the input shifted
-                                                   paddings=[[0, 0], [0, 1]],  # Pad one column after the matrix
-                                                   constant_values=eos_id)),
+                                            custom_pad(tgt,  # target input
+                                                       paddings=[[0, 0], [1, 0]],  # Pad one column before the matrix
+                                                       constant_values=sos_id),  # use this to pad
+                                            custom_pad(tgt,  # target output, the input shifted
+                                                       paddings=[[0, 0], [0, 1]],  # Pad one column after the matrix
+                                                       constant_values=eos_id)),
                           num_threads=num_threads,
                           output_buffer_size=output_buffer_size)
     # Get the length of the biggest utterance in the dialogue for the source and the target respectively.
@@ -252,6 +256,7 @@ def get_iterator(dataset,
 
         def reduce_func(unused_key, windowed_data):
             return batching_func(windowed_data)
+
         # Maps each consecutive elements in this dataset to a key using key_func to at
         # most window_size elements matching the same key.
         dataset = dataset.group_by_window(
@@ -260,19 +265,17 @@ def get_iterator(dataset,
     else:
         dataset = batching_func(dataset)
 
-
     iterator = dataset.make_initializable_iterator()
     (src, tgt_in, tgt_out, src_seq_len, tgt_seq_len, dialogue_len) = iterator.get_next()
-    return BatchedInput(
+    return End2EndBatchedInput(
         initializer=iterator.initializer,
-        source=src,
-        target_input=tgt_in,
-        target_output=tgt_out,
-        source_sequence_length=src_seq_len,
-        target_sequence_length=tgt_seq_len,
-        dialogue_length=dialogue_len
+        source=src,  # shape=[batch_size, ceil(dialogue_max_len / 2), src_max_len]
+        target_input=tgt_in,  # shape=[batch_size, floor(dialogue_max_len / 2), tgt_max_len]
+        target_output=tgt_out,  # shape=[batch_size, floor(dialogue_max_len / 2), tgt_max_len]
+        source_sequence_length=src_seq_len,  # shape=[batch_size]
+        target_sequence_length=tgt_seq_len,  # shape=[batch_size]
+        dialogue_length=dialogue_len  # shape=[batch_size]
     )
-
 
 
 def string_split_dense(dialogue, pad, delimiter=' '):
@@ -283,3 +286,13 @@ def string_split_dense(dialogue, pad, delimiter=' '):
 
     return dense
 
+
+def custom_pad(_input, paddings, constant_values):
+    """Used for padding with custom value. Used for tf versions < 1.3"""
+    # Use broadcasting to substract it
+    _input = _input - constant_values
+    # Pad it with 0
+    _input = tf.pad(_input, paddings)
+    # Add the constant value using broadcast
+    _input = _input + constant_values
+    return _input

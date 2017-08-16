@@ -142,7 +142,7 @@ class IteratorUtilsTest(tf.test.TestCase):
                 tgt_out
             )
             self.assertAllEqual(
-                [1, 2],  # Remember that they are switched
+                [1, 2],  # Remember that they are switched. The max nr of words in first is 1.
                 src_seq_len
             )
             self.assertAllEqual(
@@ -150,7 +150,7 @@ class IteratorUtilsTest(tf.test.TestCase):
                 tgt_seq_len
             )
             self.assertAllEqual(
-                [1, 2],
+                [1, 2],  # The first batch has only one exchange
                 diag_len
             )
 
@@ -167,7 +167,7 @@ class IteratorUtilsTest(tf.test.TestCase):
         eos = "eos"
         eou = "eou"
         utt_max_len = 3
-        dialogue_max_len = 2
+        dialogue_max_len = 4
 
         iterator = end2end_iterator_utils.get_infer_iterator(dataset, vocab_table,
                                                              batch_size, src_reverse, eos, eou,
