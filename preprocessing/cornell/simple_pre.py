@@ -40,7 +40,7 @@ VOCAB_SIZE = 10000
 def prepare_raw_data():
     print('Preparing raw data into train set and test set ...')
 
-    conversations = base.load_conversations()[:2]
+    conversations = base.load_conversations()
     tokenized_conv = preprocessing_utils.tokenize_conversations(conversations, number_token=NUMBER_TOKEN,
                                                  name_token=NAME_TOKEN, gpe_token=GPE_TOKEN)
     questions, answers = simple.question_answers(tokenized_conv)
