@@ -21,7 +21,7 @@ https://github.com/chiphuyen/stanford-tensorflow-tutorials/blob/master/assignmen
 import os
 
 
-DATA_PATH = "E:\Projects\DIalogue systems\Chatbot\data\cornell"
+DATA_PATH = os.path.abspath('../../data/cornell')
 LINE_FILE = "movie_lines.txt"
 PROCESSED_DIR_PATH = os.path.join(DATA_PATH, 'processed')
 CONVO_FILE = 'movie_conversations.txt'
