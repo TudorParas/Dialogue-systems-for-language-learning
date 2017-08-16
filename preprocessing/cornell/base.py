@@ -19,6 +19,7 @@ https://github.com/chiphuyen/stanford-tensorflow-tutorials/blob/master/assignmen
 """
 
 import os
+from utils.preprocessing_utils import make_dir
 
 
 DATA_PATH = os.path.abspath('../../data/cornell')
@@ -68,5 +69,6 @@ def build_conv(id2line, convos):
     return conversations
 
 def load_conversations():
+    make_dir(PROCESSED_DIR_PATH)
     return build_conv(get_lines(), get_convos())
 
