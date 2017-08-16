@@ -139,6 +139,10 @@ def get_iterator(dataset,
     eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
     # Split the dialogs into individual utterances.
     dataset = dataset.map(lambda dialogue: tf.string_split([dialogue], eou).values)  # shape=[dialogue_length, ]
+
+    # ToDo: Remove the fist line from each dialogue and append it at the end. In this way we don't lose
+    # half of the data
+
     # Cut the dialogue short to max length
     if dialogue_max_len:
         dataset = dataset.map(lambda dialogue: dialogue[:dialogue_max_len])
@@ -146,8 +150,7 @@ def get_iterator(dataset,
     if skip_count is not None:
         dataset = dataset.skip(count=skip_count)
     # Shuffle the dataset.
-    # ToDo: uncomment
-    # dataset = dataset.shuffle(output_buffer_size, random_seed)
+    dataset = dataset.shuffle(output_buffer_size, random_seed)
 
     # We will split the data into source and target, i.e. what the user says and what we want the system to predict.
     # We need a predetermined dialogue_max_len
@@ -239,7 +242,6 @@ def get_iterator(dataset,
             # Calculate bucket_width by maximum source sequence length.
             if src_max_len:
                 utt_bucket_width = (src_max_len + num_utterance_buckets - 1) // num_utterance_buckets
-                print(utt_bucket_width)
             else:
                 utt_bucket_width = 10
 
