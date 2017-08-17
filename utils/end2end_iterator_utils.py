@@ -303,8 +303,8 @@ def get_iterator(dataset,
         target_input=tgt_in,  # shape=[batch_size, floor(dialogue_max_len / 2), tgt_max_len]
         target_output=tgt_out,  # shape=[batch_size, floor(dialogue_max_len / 2), tgt_max_len]
         target_weights=tgt_weights,  # shape=[batch_size, floor(dialogue_max_len / 2), tgt_max_len]
-        source_sequence_length=src_seq_len,  # shape=[batch_size, src_max_len]
-        target_sequence_length=tgt_seq_len,  # shape=[batch_size, tgt_max_len]
+        source_sequence_length=src_seq_len,  # shape=[batch_size, dialogue_max_length]
+        target_sequence_length=tgt_seq_len,  # shape=[batch_size, dialogue_max_length]
         dialogue_length=dialogue_len  # shape=[batch_size]
     )
 
