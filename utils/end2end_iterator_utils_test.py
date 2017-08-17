@@ -30,8 +30,8 @@ class IteratorUtilsTest(tf.test.TestCase):
     def testGetIterator(self):
         dataset = tf.contrib.data.Dataset.from_tensor_slices(
             tf.constant(["a b b a eou c a b  eou a c c c eou a b c a",
-                         "a b eou f a eou b eou c eou a",
-                         "a c eou b f a f eou c a a a",
+                         "a c eou b f a f eou c a",
+                         "a b c eou f a eou b eou a eou c",
                          "a eou b "])
         )
         vocab_table = lookup_ops.index_table_from_tensor(
@@ -56,6 +56,7 @@ class IteratorUtilsTest(tf.test.TestCase):
         source = iterator.source
         target_in = iterator.target_input
         target_out = iterator.target_output
+        target_weights = iterator.target_weights
         source_len = iterator.source_sequence_length
         target_len = iterator.target_sequence_length
         dialogue_len = iterator.dialogue_length
@@ -63,8 +64,9 @@ class IteratorUtilsTest(tf.test.TestCase):
         self.assertEqual([None, None, None], source.shape.as_list())
         self.assertEqual([None, None, None], target_in.shape.as_list())
         self.assertEqual([None, None, None], target_out.shape.as_list())
-        self.assertEqual([None], source_len.shape.as_list())
-        self.assertEqual([None], target_len.shape.as_list())
+        self.assertEqual([None, None, None], target_weights.shape.as_list())
+        self.assertEqual([None, None], source_len.shape.as_list())
+        self.assertEqual([None, None], target_len.shape.as_list())
         self.assertEqual([None], dialogue_len.shape.as_list())
 
         with self.test_session() as sess:
@@ -78,36 +80,38 @@ class IteratorUtilsTest(tf.test.TestCase):
                 [[[0, 1, 1],  # a b b, cut off because of src_max_len
                   [0, 2, 2]],  # a c c
                  # These two are batched together because of bucketing
-                 [[0, 2, 4],  # a c pad=eos, because we use eos for padding. I will differentiate them in comments
-                  [2, 0, 0]]],  # c a a
+                 [[0, 1, 2],  # a b c
+                  [1, 4, 4]]],  # c pad=eos pad because we use eos for padding. I will differentiate them in comments
                 src_eval
             )
             self.assertAllEqual(
                 [[[3, 2, 0],  # sos c a. Truncated because of tgt_max_len
                   [3, 0, 1]],  # sos a b
 
-                 [[3, 1, -1],  # sos b f='unknown'
-                  [4, 4, 4]]],  # pad pad pad, because there's not response.
+                 [[3, -1, 0],  # sos f='unknown' a
+                  [3, 0, 4]]],  # sos a pad
                 tgt_in
             )
             self.assertAllEqual(
                 [[[2, 0, 4],  # c a eos
                   [0, 1, 4]],  # a b eos
 
-                 [[1, -1, 4],  # b f='unknown' eos
-                  [4, 4, 4]]],  # pad pad pad
+                 [[-1, 0, 4],  # f='unknown' a eos
+                  [0, 4, 4]]],  # a pad eos
                 tgt_out
             )
             self.assertAllEqual(
-                [3, 3],  # Both have been truncated to 3
+                [[3, 3],  # length of first utterance, length of second utterance in first dialogue
+                 [3, 1]],  # first and second utterance in second dialogue
                 src_seq_len
             )
             self.assertAllEqual(
-                [3, 3],  # we include padding
+                [[3, 3],  # we include the sos and eos symbols
+                 [3, 2]],
                 tgt_seq_len
             )
             self.assertAllEqual(
-                [2, 1],  # because for the second one we have only one exchange
+                [2, 2],  # Dialogue lengths
                 diag_len
             )
 
@@ -118,39 +122,37 @@ class IteratorUtilsTest(tf.test.TestCase):
 
             self.assertAllEqual(
                 [[[0, 4],  # a pad
-                  [4, 4]],  # pad pad
+                  [4, 4]],  # pad pad, because the next in the batch has this src
                  # In this order because when carrying on we first look at the next elem, 4, and then batch em.
-                 [[0, 1],  # a b
-                  [1, 4]]],  # b pad
+                 [[0, 2],  # a c
+                  [2, 0]]],  # c a
                 # Note that it has been cut of short because of dialogue_max_len
                 src_eval
             )
             self.assertAllEqual(
-                [[[3, 1, 4],  # sos b
-                  [4, 4, 4]],  # pad pad
+                [[[3, 1, 4]],  # sos b pad
 
-                 [[3, -1, 0],  # sos f='unknown' a
-                  [3, 2, 4]]],  # sos c pad
+                 [[3, 1, -1]]],  # sos b f='unknown'
                 tgt_in
             )
             self.assertAllEqual(
-                [[[1, 4, 4],  # b eos
-                  [4, 4, 4]],  # pad pad
+                [[[1, 4, 4]],  # b pad eos
 
-                 [[-1, 0, 4],  # f='unknown' a eos
-                  [2, 4, 4]]],  # c pad eos
+                 [[1, -1, 4]]],  # b f='unknown' eos
                 tgt_out
             )
             self.assertAllEqual(
-                [1, 2],  # Remember that they are switched. The max nr of words in first is 1.
+                [[1, 0],  # Second utterance in first dialogue is only padding, so len of 0 for it
+                 [2, 2]],
                 src_seq_len
             )
             self.assertAllEqual(
-                [2, 3],  # Because of padding
+                [[2],   # we count padding as well
+                 [3]],
                 tgt_seq_len
             )
             self.assertAllEqual(
-                [1, 2],  # The first batch has only one exchange
+                [1, 1],  # Only one exchange
                 diag_len
             )
 
@@ -177,7 +179,7 @@ class IteratorUtilsTest(tf.test.TestCase):
         seq_len = iterator.source_sequence_length
         diag_len = iterator.dialogue_length
         self.assertEqual([None, None, None], source.shape.as_list())
-        self.assertEqual([None], seq_len.shape.as_list())
+        self.assertEqual([None, None], seq_len.shape.as_list())
         self.assertEqual([None], diag_len.shape.as_list())
         with self.test_session() as sess:
             sess.run(tf.tables_initializer())
@@ -194,7 +196,8 @@ class IteratorUtilsTest(tf.test.TestCase):
                 src_eval
             )
             self.assertAllEqual(
-                [3, 2],  # a b b (because of utt_max_len) and a c
+                [[3, 1],
+                [2, 1]],
                 seq_len_eval
             )
             self.assertAllEqual(
@@ -212,7 +215,9 @@ class IteratorUtilsTest(tf.test.TestCase):
                   [3]]],  # pad
                 src_eval
             )
-            self.assertAllEqual([1, 1], seq_len_eval)
+            self.assertAllEqual([[1, 1],
+                                 [1, 0]],
+                                seq_len_eval)
             self.assertAllEqual([2, 1], diag_len_eval)
 
 
