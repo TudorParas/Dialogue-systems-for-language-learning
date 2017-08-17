@@ -73,9 +73,8 @@ class IteratorUtilsTest(tf.test.TestCase):
             sess.run(tf.tables_initializer())
             sess.run(iterator.initializer)
 
-            (src_eval, tgt_in, tgt_out, src_seq_len, tgt_seq_len, diag_len) = (sess.run((source, target_in, target_out,
-                                                                                         source_len, target_len,
-                                                                                         dialogue_len)))
+            (src_eval, tgt_in, tgt_out, tgt_weights, src_seq_len, tgt_seq_len, diag_len) = sess.run((
+                source, target_in, target_out, target_weights, source_len, target_len, dialogue_len))
             self.assertAllEqual(
                 [[[0, 1, 1],  # a b b, cut off because of src_max_len
                   [0, 2, 2]],  # a c c
@@ -101,6 +100,14 @@ class IteratorUtilsTest(tf.test.TestCase):
                 tgt_out
             )
             self.assertAllEqual(
+                [[[1, 1, 1],
+                  [1, 1, 1]],
+
+                 [[1, 1, 1],
+                  [1, 1, 0]]],  # The 0 is where the padding is
+                tgt_weights
+            )
+            self.assertAllEqual(
                 [[3, 3],  # length of first utterance, length of second utterance in first dialogue
                  [3, 1]],  # first and second utterance in second dialogue
                 src_seq_len
@@ -116,9 +123,8 @@ class IteratorUtilsTest(tf.test.TestCase):
             )
 
             # Get next batch
-            (src_eval, tgt_in, tgt_out, src_seq_len, tgt_seq_len, diag_len) = (sess.run((source, target_in, target_out,
-                                                                                         source_len, target_len,
-                                                                                         dialogue_len)))
+            (src_eval, tgt_in, tgt_out, tgt_weights, src_seq_len, tgt_seq_len, diag_len) = sess.run((
+                source, target_in, target_out, target_weights, source_len, target_len, dialogue_len))
 
             self.assertAllEqual(
                 [[[0, 4],  # a pad
@@ -140,6 +146,12 @@ class IteratorUtilsTest(tf.test.TestCase):
 
                  [[1, -1, 4]]],  # b f='unknown' eos
                 tgt_out
+            )
+            self.assertAllEqual(
+                [[[1, 1, 0]],
+
+                 [[1, 1, 1]]],
+                tgt_weights
             )
             self.assertAllEqual(
                 [[1, 0],  # Second utterance in first dialogue is only padding, so len of 0 for it

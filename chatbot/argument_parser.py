@@ -46,7 +46,7 @@ def add_arguments(parser):
     parser.add_argument("--time_major", type="bool", nargs="?", const=True,
                         default=True,
                         help="Whether to use time-major mode for dynamic RNN. This would change the shape of the \
-                             data")
+                             data. Useful because of performance reason, how C++ keeps data in memory")
     # Hyperparameters regarding the optimizer
     parser.add_argument("--optimizer", type=str, default="sgd", help="sgd | adam")
     parser.add_argument("--learning_rate", type=float, default=1.0,

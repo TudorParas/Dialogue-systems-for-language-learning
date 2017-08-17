@@ -55,7 +55,7 @@ class SimpleModel(BaseModel):
             encoder_emb_inp = tf.nn.embedding_lookup(
                 self.embeddings, source)
 
-            # Encoder_outpus: [source shape, num_units]
+            # Encoder_outputs: [source shape, num_units]
             if hparams.encoder_type == "uni":
                 if self.verbose:
                     utils.print_out("  num_layers = %d, num_residual_layers=%d" %
@@ -110,7 +110,7 @@ class SimpleModel(BaseModel):
         """Create and call biddirectional RNN cells.
 
         Args:
-          num_residual_layers: Number of residual layers from top to bottom. For
+          num_bi_residual_layers: Number of residual layers from top to bottom. For
             example, if `num_bi_layers=4` and `num_residual_layers=2`, the last 2 RNN
             layers in each RNN cell will be wrapped with `ResidualWrapper`.
           base_gpu: The gpu device id to use for the first forward RNN layer. The

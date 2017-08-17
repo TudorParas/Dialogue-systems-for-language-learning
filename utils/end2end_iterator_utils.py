@@ -261,7 +261,7 @@ def get_iterator(dataset,
             padding_values=(eos_id,  # src
                             eos_id,  # tgt_input
                             eos_id,  # tgt_output
-                            eos_id,  # tgt_weights
+                            0,  # tgt_weights
                             0,  # src_len
                             0,  # tgt_len
                             0))  # diag_len -- unused

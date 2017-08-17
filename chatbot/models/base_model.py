@@ -505,7 +505,7 @@ class BaseModel(object):
     def infer(self, sess):
         """Run a session and get the inference output"""
         if self.mode != tf.contrib.learn.ModeKeys.INFER:
-            raise ValueError("Mode need to be trains to get the inference")
+            raise ValueError("Mode need to be inference to get the inference")
         return sess.run([
             self.infer_logits, self.infer_summary, self.sample_id, self.sample_words
         ])
