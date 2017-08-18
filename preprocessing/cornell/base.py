@@ -19,7 +19,6 @@ https://github.com/chiphuyen/stanford-tensorflow-tutorials/blob/master/assignmen
 """
 
 import os
-import codecs
 from utils.preprocessing_utils import make_dir
 
 
@@ -47,7 +46,7 @@ def get_convos():
     """ Get conversations from the raw data """
     file_path = os.path.join(DATA_PATH, CONVO_FILE)
     convos = []
-    with codecs.open(file_path, 'r', encoding='cp1252') as f:
+    with open(file_path, 'r', encoding='cp1252') as f:
         for line in f.readlines():
             parts = line.split(' +++$+++ ')
             if len(parts) == 4:

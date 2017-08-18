@@ -1,7 +1,7 @@
 #                          Dialogue systems for language learning
 			
-  What is it?
-  -----------
+What is it?
+-----------
   
 A dialogue system meant to be used for language learning.
 
@@ -13,13 +13,29 @@ Based on:
 
 Created by Tudor Paraschivescu for the Cambridge UROP project "Dialogue systems for language learning".
 
- Training
-  --------
+
+Dependencies
+-------
+Overall: tensorflow >= 1.2.1, numpy, nltk
+Preprocessing: scikit-learn (for train-test split), tqdm (for checking progress)
+
+Tensorflow can be installed by following the [tensorflow installation instructions](https://www.tensorflow.org/install/). Note that a virtualenv installation is recommended, with pip install, and that you need pip version >=8.1.
+
+
+Data
+-------
+
+For training a model download the [Cornell Movie-Dialogs Corpus](http://www.mpi-sws.org/~cristian/data/cornell_movie_dialogs_corpus.zip)
+
+Change to the `Dialogue-systems-for-language-learning` (root) directory, create a 'data/cornell' directory path and unzip the 'cornell movie-dialogs corpus' folder from the zip file into it.
+
+Make sure you're in the root directory again and run the script 'simple_pre.py' located in 'preprocessing/cornell'. This will take care of the preprocessing. 
+
+
+Training
+--------
   
-  For training a model download the [Cornell Movie-Dialogs Corpus](http://www.mpi-sws.org/~cristian/data/cornell_movie_dialogs_corpus.zip)
-Afterwards reate a 'data/cornell' path from the main repo and unzip the 'cornell movie-dialogs corpus' folder from the zip file into it. Run the script 'simple_pre.py' located in 'preprocessing/cornell'. This will take care of the preprocessing. 
-  
-  To begin training run 'chatbot/run.py' using the arguments:
+To begin training run 'chatbot/run.py' using the arguments:
   
         --src=enc --tgt=dec \
         --vocab_file="<repo-path>\data\cornell\processed\nmt\vocab"  \
@@ -74,12 +90,6 @@ The hyperparameters which can be tweaked for a different experience are:
     number_token: the token used for replacing numbers. Used for posprocessing, which can be changed by tweaking the          'postprocess_output' method in 'utils/chatbot_utils'.
     name_token: similar to number_token, but for names.
 
-Dependencies
--------
-Overall: tensorflow >= 1.2.1, numpy, nltk
-Preprocessing: scikit-learn (for train-test split), tqdm (for checking progress)
-
-Tensorflow can be installed by following the following [tensorflow installation instructions](https://www.tensorflow.org/install/)
 
 Issues
 -------
