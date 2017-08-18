@@ -28,6 +28,7 @@ import time
 import tensorflow as tf
 
 from chatbot.models.simple_model import SimpleModel
+from chatbot.models.hier_model import HierarchicalModel
 from chatbot import inference
 from chatbot.models import model_helper
 from utils import iterator_utils
@@ -50,14 +51,13 @@ def train(hparams, scope=None, target_session=''):
     if not steps_per_external_eval:
         steps_per_external_eval = 5 * steps_per_eval
 
-    # ToDo: Model architecture could be chosen here using a model creator
-
     # Create three models which share parameters through the use of checkpoints
     train_model = create_train_model(hparams, scope)
     eval_model = create_eval_model(hparams, scope)
     infer_model = inference.create_infer_model(hparams, scope)
 
     # Preload the data to use for sample decoding
+
     dev_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src)
     dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
     sample_src_data = inference.load_data(dev_src_file)
