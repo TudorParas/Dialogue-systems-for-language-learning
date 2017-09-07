@@ -368,7 +368,6 @@ class BaseModel(object):
                         initial_state=decoder_initial_state,
                         output_layer=self.output_layer
                     )
-                print("########## ", self.mode)
                 # Dynamic decoding: Calls initialize() once and step() repeatedly on the Decoder object.
                 outputs, final_context_state, final_seq_lengths = tf.contrib.seq2seq.dynamic_decode(
                     decoder=basic_decoder,

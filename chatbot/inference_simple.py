@@ -42,7 +42,7 @@ class InferModel(
     pass
 
 
-def create_infer_model(model_creator, get_infer_iterator, hparams, verbose=True, scope=None):
+def create_infer_model(hparams, verbose=True, scope=None):
     """Create the inference model"""
     graph = tf.Graph()
     vocab_file = hparams.vocab_file
@@ -60,18 +60,16 @@ def create_infer_model(model_creator, get_infer_iterator, hparams, verbose=True,
         # Create the dataset and iterator
         src_dataset = tf.contrib.data.Dataset.from_tensor_slices(
             src_placeholder)
-        iterator = get_infer_iterator(
+        iterator = iterator_utils.get_infer_iterator(
             dataset=src_dataset,
             vocab_table=vocab_table,
             batch_size=batch_size_placeholder,
             src_reverse=hparams.src_reverse,
             eos=hparams.eos,
-            eou=hparams.eou,
-            src_max_len=hparams.src_max_len_infer,
-            dialogue_max_len=hparams.dialogue_max_len
+            src_max_len=hparams.src_max_len_infer
         )
         # Create the model
-        model = model_creator(
+        model = SimpleModel(
             hparams=hparams,
             iterator=iterator,
             mode=tf.contrib.learn.ModeKeys.INFER,
@@ -151,17 +149,9 @@ def inference(checkpoint, inference_input_file, inference_output_file,
     # Read the data
     infer_data = load_data(inference_input_file, hparams)
 
-    if hparams.architecture == "simple":
-        model_creator = SimpleModel
-        get_infer_iterator = iterator_utils.get_infer_iterator
-    elif hparams.architecture == "hier":
-        model_creator = HierarchicalModel
-        get_infer_iterator=end2end_iterator_utils.get_infer_iterator
-    else:
-        raise ValueError("Unkown architecture", hparams.architecture)
 
     # Containing the graph, model, source placeholder, batch_size placeholder and iterator
-    infer_model = create_infer_model(model_creator, get_infer_iterator, hparams, scope)
+    infer_model = create_infer_model(hparams, scope)
     # ToDo: adapt for architectures
     with tf.Session(graph=infer_model.graph, config=utils.get_config_proto()) as sess:
         # Load the model from the checkpoint
@@ -202,9 +192,7 @@ def inference(checkpoint, inference_input_file, inference_output_file,
 
 def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
     # Containing the graph, model, source placeholder, batch_size placeholder and iterator
-    infer_model = create_infer_model(model_creator=SimpleModel,
-                                     get_infer_iterator=iterator_utils.get_infer_iterator,
-                                     hparams=hparams, verbose=False, scope=scope)
+    infer_model = create_infer_model(hparams=hparams, verbose=False, scope=scope)
     with tf.Session(graph=infer_model.graph, config=utils.get_config_proto()) as sess:
         # Load the model from the checkpoint
         # ToDo: adapt for architectures
