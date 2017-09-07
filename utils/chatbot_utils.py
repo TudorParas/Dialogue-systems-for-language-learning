@@ -51,6 +51,7 @@ def decode_and_evaluate(name,
             while True:
                 try:
                     # Get the response(s) for each input in the batch (whole file in this case)
+                    # ToDo: adapt for architectures
                     outputs, infer_summary = model.decode(sess)
 
                     if beam_width > 0:

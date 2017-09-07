@@ -50,11 +50,16 @@ def write_dataset(tokenized_conversations):
     train, test = train_test_split(tokenized_conversations, test_size=0.02, random_state=53)
     test, val = train_test_split(test, test_size=0.5, random_state=53)
 
+    # Split our data in source and target
+    train_utt, train_resp = src_target_split(train)
+    val_utt, val_resp = src_target_split(val)
+    test_utt, test_resp = src_target_split(test)
 
-    filenames = ['train', 'val', 'test']
+
+    filenames = ['train.utt', 'val.utt', 'test.utt', 'train.resp', 'val.resp', 'test.resp']
     paths = [os.path.join(PROCESSED_DIR_PATH, file) for file in filenames]
     # Write the train and the test to file
-    for index, data in enumerate([train, val, test]):
+    for index, data in enumerate([train_utt, val_utt, test_utt, train_resp, val_resp, test_resp]):
         with codecs.getwriter("utf-8")(tf.gfile.GFile(paths[index], "wb+")) as f:
             for conv in tqdm(data, "Processing %s conversations" % filenames[index]):
                 for line in conv:
@@ -64,16 +69,44 @@ def write_dataset(tokenized_conversations):
                 # Each conversation is written on a separate line
                 f.write('\n')
 
+    # Return the path to the train.utt file from which we generate the vocab
+    return paths[0]
+
+def src_target_split(data):
+    # We are going to split our con
+    utterances = []
+    responses = []
+    for conv in data:
+        # Build two lists two hold the first and second user's utterances respectively
+        current_utt = []
+        current_resp = []
+        for index, line in enumerate(conv):
+            if index % 2 == 0:
+                current_utt.append(line)
+            else:
+                current_resp.append(line)
+        # Now put them in data so we can infer about them later
+        utterances.append(current_utt)
+        responses.append(current_resp)
+        # If we were to stop here we would be trowing away half the data, as the utterances shifted by 1
+        # are themselves responses to their responses
+        response_responses = current_utt[1:]
+        # Append them only if it wasn't a one turn utterance-response dialogue
+        if len(response_responses) > 0:
+            utterances.append(current_resp)
+            responses.append(response_responses)
+
+    return utterances, responses
+
 
 def preprocesss():
-    id2line, convos = base.get_lines(), base.get_convos()
     conversations = base.load_conversations()
     tokenized_conversations = preprocessing_utils.tokenize_conversations(conversations,
                                                                          number_token=NUMBER_TOKEN,
                                                                          name_token=NAME_TOKEN,
                                                                          gpe_token=GPE_TOKEN)
-    write_dataset(tokenized_conversations)
-    preprocessing_utils.create_vocab(src_file=os.path.join(PROCESSED_DIR_PATH, 'train'),
+    src_file = write_dataset(tokenized_conversations)
+    preprocessing_utils.create_vocab(src_file=src_file,
                                      out_dir=PROCESSED_DIR_PATH,
                                      vocab_size=VOCAB_SIZE,
                                      eos=EOS,

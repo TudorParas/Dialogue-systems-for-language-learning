@@ -35,7 +35,7 @@ class End2EndBatchedInput(collections.namedtuple("BatchedInput",
 
 
 def get_infer_iterator(dataset, vocab_table, batch_size,
-                       src_reverse, eos, eou, utt_max_len=None,
+                       src_reverse, eos, eou, src_max_len=None,
                        dialogue_max_len=None):
     """
     Returns an iterator for the inference graph which does not contain target data.
@@ -48,12 +48,11 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
                     have a bigger impact on the response
     :param eos: The end of sentence string
     :param eou: End of utterance. This is the token which marks end of utterances in the input file
-    :param utt_max_len: Maximum accepted length for utterance. Bigger inputs will be truncated.
+    :param src_max_len: Maximum accepted length for utterance. Bigger inputs will be truncated.
     :param dialogue_max_len: Maximum accepted length for the dialogue. Responses considered as well, for consistency
     """
 
     # Make dialogue_max_len represent only how many user utterances there are
-    dialogue_max_len = dialogue_max_len // 2
     # We use the eos token to pad the data
     eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
     # Split the dialogs into individual utterances.
@@ -66,8 +65,8 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
     # utterance in the matrix
     dataset = dataset.map(lambda dialogue: string_split_dense(
         dialogue, pad=eos))  # shape=[dialogue_length, utterance_length]
-    if utt_max_len:
-        dataset = dataset.map(lambda dialogue: dialogue[:, :utt_max_len])
+    if src_max_len:
+        dataset = dataset.map(lambda dialogue: dialogue[:, :src_max_len])
     # Get the integers mappings from the vocab_table. We also need to explicitly cast it
     dataset = dataset.map(lambda dialogue: tf.cast(vocab_table.lookup(dialogue), tf.int32))
     # Reverse the utterances if so states. We do so by reversing along the columns
@@ -101,7 +100,6 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
                             0,
                             0))  # src_len -- unused
 
-
     dataset = batching_func(dataset)
     iterator = dataset.make_initializable_iterator()
     (ids, utt_length, diag_len) = iterator.get_next()
@@ -117,7 +115,8 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
     )
 
 
-def get_iterator(dataset,
+def get_iterator(src_dataset,
+                 tgt_dataset,
                  vocab_table,
                  batch_size,
                  sos,
@@ -134,15 +133,15 @@ def get_iterator(dataset,
                  skip_count=None):
     """
     Create iterator for the training or evaluation graph.
-    :param dataset: The dataset consisting of alternating utterances and responses. The user starts and the DS
-        will be trained to predict the response.
+    :param src_dataset: The dataset consisting of utterances separated by eou
+    :param tgt_dataset: The dataset consisting of responses separated by eou
     :param sos: The 'start of string' string.
     :param eos: The 'end of string' string
     :param eou: End of utterance. This is the token which marks end of utterances in the input file
     :param src_reverse: Whether to reverse the input.
     :param random_seed: Seed used to fuel a pseudo-random number generator.
     :param num_dialogue_buckets: Number of buckets in which we put data of similar dialogue length.
-    :param dialogue_max_len: Maximum length of the dialogue. A utterance-response pair counts as 2.
+    :param dialogue_max_len: Maximum length of the dialogue. A utterance-response pair counts as 1.
     :param num_threads: The number of threads to use for processing elements in parallel.
     :param output_buffer_size: The number of elements from this dataset from which the new dataset will sample
     :param skip_count: The number of elements of this dataset that should be skipped to form the new dataset.
@@ -153,29 +152,25 @@ def get_iterator(dataset,
     # Get the ids
     sos_id = tf.cast(vocab_table.lookup(tf.constant(sos)), tf.int32)
     eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
+    # Zip them together to create a single dataset
+    dataset = tf.contrib.data.Dataset.zip((src_dataset, tgt_dataset))
     # Split the dialogs into individual utterances.
-    dataset = dataset.map(lambda dialogue: tf.string_split([dialogue], eou).values)  # shape=[dialogue_length, ]
+    dataset = dataset.map(lambda src, tgt: (tf.string_split([src], eou).values,  # shape=[dialogue_length, ]
+                                            tf.string_split([tgt], eou).values),
+                          num_threads=num_threads,
+                          output_buffer_size=output_buffer_size)
 
-    # ToDo: Remove the fist line from each dialogue and append it at the end. In this way we don't lose
-    # half of the data
 
     # Cut the dialogue short to max length
     if dialogue_max_len:
-        dataset = dataset.map(lambda dialogue: dialogue[:dialogue_max_len])
+        dataset = dataset.map(lambda src, tgt: (src[:dialogue_max_len], tgt[:dialogue_max_len]),
+                              num_threads=num_threads,
+                              output_buffer_size=output_buffer_size)
     # Skip the first skip_count elements.
     if skip_count is not None:
         dataset = dataset.skip(count=skip_count)
     # Shuffle the dataset.
     dataset = dataset.shuffle(output_buffer_size, random_seed)
-
-    # We will split the data into source and target, i.e. what the user says and what we want the system to predict.
-    # We need a predetermined dialogue_max_len
-    dataset = dataset.map(lambda dialogue: (tf.strided_slice(dialogue, begin=[0],
-                                                             end=[tf.shape(dialogue)[0]], strides=[2]),
-                                            tf.strided_slice(dialogue, begin=[1],
-                                                             end=[tf.shape(dialogue)[0]], strides=[2])),
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)
 
     # Tokenize the utterances. This step also pads the matrices up to the length of the longest
     # utterance in the matrix
@@ -205,12 +200,12 @@ def get_iterator(dataset,
     # Create a tgt_input prefixed with <sos> and a tgt_output suffixed with <eos>.
     # We are going to use the pad value provided by tensorflow.
     dataset = dataset.map(lambda src, tgt: (src,
-                                            custom_pad(tgt,  # target input
-                                                       paddings=[[0, 0], [1, 0]],  # Pad one column before the matrix
-                                                       constant_values=sos_id),  # use this to pad
-                                            custom_pad(tgt,  # target output, the input shifted
-                                                       paddings=[[0, 0], [0, 1]],  # Pad one column after the matrix
-                                                       constant_values=eos_id)),
+                                            tf.pad(tgt,  # target input
+                                                   paddings=[[0, 0], [1, 0]],  # Pad one column before the matrix
+                                                   constant_values=sos_id),  # use this to pad
+                                            tf.pad(tgt,  # target output, the input shifted
+                                                   paddings=[[0, 0], [0, 1]],  # Pad one column after the matrix
+                                                   constant_values=eos_id)),
                           num_threads=num_threads,
                           output_buffer_size=output_buffer_size)
     # Get the length of the biggest utterance in the dialogue for the source and the target respectively.
@@ -231,7 +226,7 @@ def get_iterator(dataset,
                           num_threads=num_threads,
                           output_buffer_size=output_buffer_size)
     # Get the sequence lengths.
-    dataset = dataset.map(lambda src, tgt_in, tgt_out, src_weights, tgt_weights, diag_len:(
+    dataset = dataset.map(lambda src, tgt_in, tgt_out, src_weights, tgt_weights, diag_len: (
         src,
         tgt_in,
         tgt_out,
@@ -240,6 +235,7 @@ def get_iterator(dataset,
         tf.cast(tf.count_nonzero(tgt_weights, axis=1), tf.int32),
         diag_len
     ))
+
     # Bucket by source sequence length (buckets for lengths 0-9, 10-19, ...).
     # Shape becomes [batch_size, dialogue_max_length, utterance_max_len]
     def batching_func(x):
@@ -266,7 +262,6 @@ def get_iterator(dataset,
                             0,  # tgt_len
                             0))  # diag_len -- unused
 
-    # ToDo: implement bucketing by the length of the dialogue as well
     if num_dialogue_buckets > 1:
         def key_func(unused_1, unused_2, unused_3, unused_4, unused_5, usused_6, dialogue_len):
             # Pairs with length [0, bucket_width) go to bucket 0, length
@@ -316,14 +311,3 @@ def string_split_dense(dialogue, pad, delimiter=' '):
     dense = tf.sparse_tensor_to_dense(sparse, default_value=pad)
 
     return dense
-
-
-def custom_pad(_input, paddings, constant_values):
-    """Used for padding with custom value. Can be changed with default impl for tf versions >= 1.3"""
-    # Use broadcasting to substract it
-    _input = _input - constant_values
-    # Pad it with 0
-    _input = tf.pad(_input, paddings)
-    # Add the constant value using broadcast
-    _input = _input + constant_values
-    return _input

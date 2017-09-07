@@ -47,6 +47,15 @@ def add_arguments(parser):
                         default=True,
                         help="Whether to use time-major mode for dynamic RNN. This would change the shape of the \
                              data. Useful because of performance reason, how C++ keeps data in memory")
+    # Architecture choice
+    parser.add_argument("--architecture", type=str, default="simple",
+                        help="simple | hier. If hier make sure to give the context hparams as well")
+    # Hierarchical architecture hyperparameters
+    parser.add_argument("--context_num_units", type=int, default=32, help="Context cell hidden size")
+    parser.add_argument("--context_num_layers", type=int, default=2, help="Depth of context cell")
+    parser.add_argument("--context_unit_type", type=str, default="lstm",
+                        help="lstm | gru | layer_norm_lstm")
+
     # Hyperparameters regarding the optimizer
     parser.add_argument("--optimizer", type=str, default="sgd", help="sgd | adam")
     parser.add_argument("--learning_rate", type=float, default=1.0,
@@ -67,7 +76,7 @@ def add_arguments(parser):
                         help=("Whether try colocating gradients with "
                               "corresponding op"))
 
-    # Data paths
+    # Data paths for simple architecture
     parser.add_argument("--src", type=str, default=None,
                         help="Source suffix, e.g., en.")
     parser.add_argument("--tgt", type=str, default=None,
@@ -78,6 +87,8 @@ def add_arguments(parser):
                         help="Dev prefix, expect files with src/tgt suffixes.")
     parser.add_argument("--test_prefix", type=str, default=None,
                         help="Test prefix, expect files with src/tgt suffixes.")
+
+    # Out path
     parser.add_argument("--out_dir", type=str, default=None,
                         help="Store log/model files.")
     # Vocab path
@@ -87,6 +98,8 @@ def add_arguments(parser):
                         help="Start-of-sentence symbol.")
     parser.add_argument("--eos", type=str, default="</s>",
                         help="End-of-sentence symbol.")
+    parser.add_argument("--eou", type=str, default="-eou-",
+                        help="Used in the hierarchical model to find the end of utterances")
     parser.add_argument("--number_token", type=str, default=None,
                         help="Token used to replace seen numbers")
     parser.add_argument("--name_token", type=str, default=None,
@@ -106,6 +119,8 @@ def add_arguments(parser):
         Max length of tgt sequences during inference.  Also use to restrict the
         maximum decoding length.\
         """)
+    parser.add_argument("--dialogue_max_len", type=int, default=50, help="Max length of dialogue \
+                        during training. Used by the hierarchical model")
 
     # Default settings works well (rarely need to change)
     parser.add_argument("--unit_type", type=str, default="lstm",
@@ -197,14 +212,23 @@ def add_arguments(parser):
 def create_hparams(flags):
     """Create training hparams."""
     return tf.contrib.training.HParams(
-        # Data
+        # Data for simple
         src=flags.src,
         tgt=flags.tgt,
         train_prefix=flags.train_prefix,
         dev_prefix=flags.dev_prefix,
         test_prefix=flags.test_prefix,
+        # Shared
         vocab_file=flags.vocab_file,
         out_dir=flags.out_dir,
+
+        # Model
+        architecture=flags.architecture,
+
+        # Context cell settings
+        context_num_units=flags.context_num_units,
+        context_num_layers=flags.context_num_layers,
+        context_unit_type=flags.context_unit_type,
 
         # Networks
         num_units=flags.num_units,
@@ -233,6 +257,7 @@ def create_hparams(flags):
         src_max_len=flags.src_max_len,
         tgt_max_len=flags.tgt_max_len,
         src_reverse=flags.src_reverse,
+        dialogue_max_len=flags.dialogue_max_len,
 
         # Inference
         top_responses=flags.top_responses,
@@ -246,6 +271,7 @@ def create_hparams(flags):
         # Vocab
         sos=flags.sos if flags.sos else vocab_utils.SOS,
         eos=flags.eos if flags.eos else vocab_utils.EOS,
+        eou=flags.eou if flags.eou else vocab_utils.EOU,
         number_token=flags.number_token,
         name_token=flags.name_token,
         gpe_token=flags.gpe_token,
@@ -283,11 +309,21 @@ def extend_hparams(hparams):
     utils.print_out("  out_dir=%s" % hparams.out_dir)
 
     # Set num_residual_layers
-    if hparams.residual and hparams.num_layers > 1:
-        num_residual_layers = hparams.num_layers - 1
+    if hparams.residual:
+        if hparams.num_layers > 1:
+            num_residual_layers = hparams.num_layers - 1
+        else:
+            num_residual_layers = 0
+        if hparams.context_num_layers > 1:
+            context_num_residual_layers = hparams.context_num_layers - 1
+        else:
+            context_num_residual_layers = 0
     else:
         num_residual_layers = 0
+        context_num_residual_layers = 0
+
     hparams.add_hparam("num_residual_layers", num_residual_layers)
+    hparams.add_hparam("context_num_residual_layers", context_num_residual_layers)
 
     # Vocab
     if hparams.vocab_file:

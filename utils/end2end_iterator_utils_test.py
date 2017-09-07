@@ -28,11 +28,17 @@ from utils import end2end_iterator_utils
 
 class IteratorUtilsTest(tf.test.TestCase):
     def testGetIterator(self):
-        dataset = tf.contrib.data.Dataset.from_tensor_slices(
-            tf.constant(["a b b a eou c a b  eou a c c c eou a b c a",
-                         "a c eou b f a f eou c a",
-                         "a b c eou f a eou b eou a eou c",
-                         "a eou b "])
+        src_dataset = tf.contrib.data.Dataset.from_tensor_slices(
+            tf.constant(["a b b a eou a c c c",
+                         "a c eou c a",
+                         "a b c eou b eou c",
+                         "a"])
+        )
+        tgt_dataset = tf.contrib.data.Dataset.from_tensor_slices(
+            tf.constant(["c a b eou a b c a",
+                         "b f a f",
+                         "f a eou a ",
+                         "b "])
         )
         vocab_table = lookup_ops.index_table_from_tensor(
             tf.constant(["a", "b", "c", "sos", "eos", "eou"])
@@ -47,10 +53,10 @@ class IteratorUtilsTest(tf.test.TestCase):
         num_buckets = 2
         src_max_len = 3
         tgt_max_len = 2
-        dialogue_max_len = 4
+        dialogue_max_len = 2
         skip_count = None
 
-        iterator = end2end_iterator_utils.get_iterator(dataset, vocab_table, batch_size, sos, eos, eou, src_reverse,
+        iterator = end2end_iterator_utils.get_iterator(src_dataset,tgt_dataset, vocab_table, batch_size, sos, eos, eou, src_reverse,
                                                        random_seed, num_buckets, dialogue_max_len, src_max_len,
                                                        tgt_max_len, skip_count=skip_count)
         source = iterator.source
@@ -180,12 +186,12 @@ class IteratorUtilsTest(tf.test.TestCase):
         src_reverse = False
         eos = "eos"
         eou = "eou"
-        utt_max_len = 3
-        dialogue_max_len = 4
+        src_max_len = 3
+        dialogue_max_len = 2
 
         iterator = end2end_iterator_utils.get_infer_iterator(dataset, vocab_table,
                                                              batch_size, src_reverse, eos, eou,
-                                                             utt_max_len, dialogue_max_len)
+                                                             src_max_len, dialogue_max_len)
 
         source = iterator.source
         seq_len = iterator.source_sequence_length

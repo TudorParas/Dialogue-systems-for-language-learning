@@ -13,19 +13,22 @@ https://arxiv.org/pdf/1507.04808.pdf
 Created by Tudor Paraschivescu for the Cambridge UROP project
 "Dialogue systems for language learning"
 
-To perform inference on given a trained model."""
+To perform inference on given a trained simple model."""
 from __future__ import print_function
 
 import codecs
 import collections
 import time
+import random
 
 import tensorflow as tf
 from tensorflow.python.ops import lookup_ops
 
 from chatbot.models.simple_model import SimpleModel
+from chatbot.models.hier_model import HierarchicalModel
 from chatbot.models import model_helper
 from utils import iterator_utils
+from utils import end2end_iterator_utils
 from utils import misc_utils as utils
 from utils import chatbot_utils
 from utils import vocab_utils
@@ -39,7 +42,7 @@ class InferModel(
     pass
 
 
-def create_infer_model(hparams, verbose=True, scope=None):
+def create_infer_model(model_creator, get_infer_iterator, hparams, verbose=True, scope=None):
     """Create the inference model"""
     graph = tf.Graph()
     vocab_file = hparams.vocab_file
@@ -57,16 +60,18 @@ def create_infer_model(hparams, verbose=True, scope=None):
         # Create the dataset and iterator
         src_dataset = tf.contrib.data.Dataset.from_tensor_slices(
             src_placeholder)
-        iterator = iterator_utils.get_infer_iterator(
+        iterator = get_infer_iterator(
             dataset=src_dataset,
             vocab_table=vocab_table,
             batch_size=batch_size_placeholder,
             src_reverse=hparams.src_reverse,
             eos=hparams.eos,
-            src_max_len=hparams.src_max_len_infer
+            eou=hparams.eou,
+            src_max_len=hparams.src_max_len_infer,
+            dialogue_max_len=hparams.dialogue_max_len
         )
         # Create the model
-        model = SimpleModel(
+        model = model_creator(
             hparams=hparams,
             iterator=iterator,
             mode=tf.contrib.learn.ModeKeys.INFER,
@@ -122,16 +127,17 @@ def _decode_inference_indices(model, sess,
             utils.print_out("%s\n" % response)
     utils.print_time("  done", start_time)
 
-def load_data(inference_input_file, hparams=None):
+def load_data(inference_input_file, lines_read=2000, hparams=None):
     """
-    Load inference data from file. To chat the inference_input_file passed in should be
-    created using io.StringIO(user_input)
+    Load inference data from file. The lines read argument makes it so that we don't test on everything.
     """
     with codecs.getreader('utf-8')(tf.gfile.GFile(inference_input_file, 'rb')) as f:
         inference_data = f.read().splitlines()
         # Trim the data. inference_indices is a list of indices of the sentences we want to inference
         if hparams and hparams.inference_indices:
             inference_data = [index for index in hparams.inference_indices]
+        else:
+            inference_data = random.sample(inference_data, lines_read)
 
         return inference_data
 
@@ -144,9 +150,19 @@ def inference(checkpoint, inference_input_file, inference_output_file,
 
     # Read the data
     infer_data = load_data(inference_input_file, hparams)
-    # Containing the graph, model, source placeholder, batch_size placeholder and iterator
-    infer_model = create_infer_model(hparams, scope)
 
+    if hparams.architecture == "simple":
+        model_creator = SimpleModel
+        get_infer_iterator = iterator_utils.get_infer_iterator
+    elif hparams.architecture == "hier":
+        model_creator = HierarchicalModel
+        get_infer_iterator=end2end_iterator_utils.get_infer_iterator
+    else:
+        raise ValueError("Unkown architecture", hparams.architecture)
+
+    # Containing the graph, model, source placeholder, batch_size placeholder and iterator
+    infer_model = create_infer_model(model_creator, get_infer_iterator, hparams, scope)
+    # ToDo: adapt for architectures
     with tf.Session(graph=infer_model.graph, config=utils.get_config_proto()) as sess:
         # Load the model from the checkpoint
         loaded_infer_model = model_helper.load_model(model=infer_model.model, ckpt=checkpoint,
@@ -186,9 +202,12 @@ def inference(checkpoint, inference_input_file, inference_output_file,
 
 def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
     # Containing the graph, model, source placeholder, batch_size placeholder and iterator
-    infer_model = create_infer_model(hparams, verbose=False, scope=scope)
+    infer_model = create_infer_model(model_creator=SimpleModel,
+                                     get_infer_iterator=iterator_utils.get_infer_iterator,
+                                     hparams=hparams, verbose=False, scope=scope)
     with tf.Session(graph=infer_model.graph, config=utils.get_config_proto()) as sess:
         # Load the model from the checkpoint
+        # ToDo: adapt for architectures
         loaded_infer_model = model_helper.load_model(model=infer_model.model, ckpt=checkpoint,
                                                      session=sess, name="infer", verbose=False)
         utils.print_out("Welcome to ChatBro! If you have any better names please let me know.")

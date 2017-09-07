@@ -95,3 +95,4 @@ Issues
 -------
 
 1) InvalidArgumentError: Multiple OpKernel registrations match NodeDef: tensorflow bug, see [this issue](https://github.com/tensorflow/tensorflow/issues/11277). It is a bug in tensorflow, if it persists deactivate beam-search by setting beam_width=0
+2) Import errors: all commands should be run from the home directory.

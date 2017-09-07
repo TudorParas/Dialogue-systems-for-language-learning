@@ -27,6 +27,7 @@ from tensorflow.python.ops import lookup_ops
 UNK = "<unk>"
 SOS = "<s>"
 EOS = "</s>"
+EOU = "-eou-"
 UNK_ID = 0
 
 def check_vocab(vocab_file, out_dir, sos=None, eos=None, unk=None):

@@ -42,6 +42,7 @@ class SimpleModel(BaseModel):
         num_layers = hparams.num_layers
         num_residual_layers = hparams.num_residual_layers
 
+
         iterator = self.iterator
         # The source ids
         source = iterator.source  # [batch_size, max_time]

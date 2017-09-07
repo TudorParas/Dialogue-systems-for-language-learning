@@ -41,8 +41,9 @@ class BatchedInput(collections.namedtuple("BatchedInput",
     pass
 
 
-def get_infer_iterator(dataset, vocab_table, batch_size,
-                       src_reverse, eos, src_max_len):
+def get_infer_iterator(dataset, vocab_table, batch_size, src_reverse,
+                       eos, src_max_len, eou=None, dialogue_max_len=None):  # ToDo: remove this
+
     """
     Returns an iterator for the inference graph which does not contain target data.
     We do not use buckets for inference.
@@ -53,6 +54,8 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
                     have a bigger impact on the response
     :param eos: The end of sentence string
     :param src_max_len: Maximum accepted length. Bigger inputs will be truncated.
+    :param dialogue_max_len: Does nothing
+    :param eou: does nothing
     """
     # Get the id for the eos token. We will use this to pad the data
     eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
@@ -109,7 +112,8 @@ def get_iterator(src_dataset,
                  tgt_max_len=None,
                  num_threads=4,
                  output_buffer_size=None,
-                 skip_count=None):
+                 skip_count=None,
+                 eou=None, dialogue_max_len=None):
     """
     Create iterator for the training or evaluation graph.
     :param sos: The 'start of string' string.
@@ -119,7 +123,8 @@ def get_iterator(src_dataset,
     :param num_threads: The number of threads to use for processing elements in parallel.
     :param output_buffer_size: The number of elements from this dataset from which the new dataset will sample
     :param skip_count: The number of elements of this dataset that should be skipped to form the new dataset.
-    :return:
+    :param dialogue_max_len: Does nothing
+    :param eou: does nothing
     """
     if not output_buffer_size:
         output_buffer_size = batch_size * 1000
