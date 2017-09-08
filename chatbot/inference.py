@@ -42,7 +42,7 @@ class InferModel(
     pass
 
 
-def create_infer_model(hparams, verbose=True, scope=None):
+def create_infer_model(model_creator, get_infer_iterator, hparams, verbose=True, scope=None):
     """Create the inference model"""
     graph = tf.Graph()
     vocab_file = hparams.vocab_file
@@ -60,7 +60,7 @@ def create_infer_model(hparams, verbose=True, scope=None):
         # Create the dataset and iterator
         src_dataset = tf.contrib.data.Dataset.from_tensor_slices(
             src_placeholder)
-        iterator = iterator_utils.get_infer_iterator(
+        iterator = get_infer_iterator(
             dataset=src_dataset,
             vocab_table=vocab_table,
             batch_size=batch_size_placeholder,
@@ -69,7 +69,7 @@ def create_infer_model(hparams, verbose=True, scope=None):
             src_max_len=hparams.src_max_len_infer
         )
         # Create the model
-        model = SimpleModel(
+        model = model_creator(
             hparams=hparams,
             iterator=iterator,
             mode=tf.contrib.learn.ModeKeys.INFER,
@@ -192,13 +192,29 @@ def inference(checkpoint, inference_input_file, inference_output_file,
 
 def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
     # Containing the graph, model, source placeholder, batch_size placeholder and iterator
-    infer_model = create_infer_model(hparams=hparams, verbose=False, scope=scope)
+
+    if hparams.architecture == "simple":
+        model_creator = SimpleModel
+        get_infer_iterator = iterator_utils.get_infer_iterator
+    elif hparams.architecture == "hier":
+        model_creator = HierarchicalModel
+        # Parse some of the arguments now
+        get_infer_iterator = lambda dataset, vocab_table, batch_size, src_reverse, eos, src_max_len: \
+            end2end_iterator_utils.get_infer_iterator(dataset, vocab_table, batch_size, src_reverse, eos,
+                                                      src_max_len=src_max_len, eou=hparams.eou,
+                                                      dialogue_max_len=hparams.dialogue_max_len)
+    else:
+        raise ValueError("Unkown architecture", hparams.architecture)
+
+    infer_model = create_infer_model(model_creator, get_infer_iterator, hparams=hparams, verbose=False, scope=scope)
+
     with tf.Session(graph=infer_model.graph, config=utils.get_config_proto()) as sess:
         # Load the model from the checkpoint
         # ToDo: adapt for architectures
         loaded_infer_model = model_helper.load_model(model=infer_model.model, ckpt=checkpoint,
                                                      session=sess, name="infer", verbose=False)
         utils.print_out("Welcome to ChatBro! If you have any better names please let me know.")
+        dialogue_so_far = ""
         # Leave it in chat mode until interrupted
         while True:
             # Read utterance from user.
@@ -206,16 +222,18 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
             # Preprocess it into the familiar format for the machine
             utterance = preprocessing_utils.tokenize_line(utterance, number_token=hparams.number_token,
                                                           name_token=hparams.name_token, gpe_token=hparams.gpe_token)
+            dialogue_so_far += (hparams.eou + utterance)
             # Transform it into a batch of size 1
-            batched_utterance = [utterance]
+            batched_dialogue = [dialogue_so_far]
             # Initialize the iterator
             sess.run(infer_model.iterator.initializer,
                      feed_dict={
-                         infer_model.src_placeholder: batched_utterance,
+                         infer_model.src_placeholder: batched_dialogue,
                          infer_model.batch_size_placeholder: 1
                      })
 
-            chatbot_utils.decode_utterance(model=loaded_infer_model, sess=sess, output_file=chat_logs_output_file,
+            response = chatbot_utils.decode_utterance(model=loaded_infer_model, sess=sess, output_file=chat_logs_output_file,
                                            bpe_delimiter=hparams.bpe_delimiter, beam_width=hparams.beam_width,
                                            utterance=utterance, top_responses=hparams.top_responses, eos=hparams.eos,
                                            number_token=hparams.number_token, name_token=hparams.name_token)
+            dialogue_so_far += (hparams.eou + response)

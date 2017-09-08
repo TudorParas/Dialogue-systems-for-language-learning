@@ -52,12 +52,48 @@ def train(hparams, scope=None, target_session=''):
     if not steps_per_external_eval:
         steps_per_external_eval = 5 * steps_per_eval
 
+    if hparams.architecture == "simple":
+        model_creator = SimpleModel
+        get_infer_iterator = iterator_utils.get_infer_iterator
+        get_iterator = iterator_utils.get_iterator
+    elif hparams.architecture == "hier":
+        model_creator = HierarchicalModel
+        # Parse some of the arguments now
+        def curry_get_infer_iterator(dataset, vocab_table, batch_size, src_reverse,
+                       eos, src_max_len):
+            return end2end_iterator_utils.get_infer_iterator(dataset, vocab_table, batch_size, src_reverse, eos,
+                                                      src_max_len=src_max_len, eou=hparams.eou,
+                                                      dialogue_max_len=hparams.dialogue_max_len)
+        get_infer_iterator = curry_get_infer_iterator
 
+        def curry_get_iterator(src_dataset,
+                 tgt_dataset,
+                 vocab_table,
+                 batch_size,
+                 sos,
+                 eos,
+                 src_reverse,
+                 random_seed,
+                 num_buckets,
+                 src_max_len=None,
+                 tgt_max_len=None,
+                 num_threads=4,
+                 output_buffer_size=None,
+                 skip_count=None):
+            return end2end_iterator_utils.get_iterator(src_dataset, tgt_dataset, vocab_table, batch_size, sos, eos,
+                                                eou=hparams.eou, src_reverse=src_reverse, random_seed=random_seed,
+                                                num_dialogue_buckets=num_buckets, src_max_len=src_max_len,
+                                                tgt_max_len=tgt_max_len, num_threads=num_threads,
+                                                output_buffer_size=output_buffer_size, skip_count=skip_count)
+
+        get_iterator = curry_get_iterator
+    else:
+        raise ValueError("Unkown architecture", hparams.architecture)
 
     # Create three models which share parameters through the use of checkpoints
-    train_model = create_train_model(hparams, scope)
-    eval_model = create_eval_model(hparams, scope)
-    infer_model = inference.create_infer_model(hparams, scope)
+    train_model = create_train_model(model_creator, get_iterator, hparams, scope)
+    eval_model = create_eval_model(model_creator, get_iterator, hparams, scope)
+    infer_model = inference.create_infer_model(model_creator, get_infer_iterator, hparams, scope)
     # ToDo: adapt for architectures
     # Preload the data to use for sample decoding
 
@@ -249,7 +285,7 @@ class TrainModel(collections.namedtuple("TrainModel", ("graph", "model", "iterat
     pass
 
 
-def create_train_model(hparams, scope=None):
+def create_train_model(model_creator, get_iterator, hparams, scope=None):
     """Create the training graph, model and iterator"""
 
     # Get the files by concatting prefixes and outputs.
@@ -267,7 +303,7 @@ def create_train_model(hparams, scope=None):
         # The number of elements of this dataset that should be skipped to form the new dataset.
         skip_count_placeholder = tf.placeholder(shape=(), dtype=tf.int64)
         # Iterator
-        iterator = iterator_utils.get_iterator(
+        iterator = get_iterator(
             src_dataset=src_dataset,
             tgt_dataset=tgt_dataset,
             vocab_table=vocab_table,
@@ -282,7 +318,7 @@ def create_train_model(hparams, scope=None):
             skip_count=skip_count_placeholder
         )
         # Model. We don't give ids_to_words arg because we don't need it for training
-        model = SimpleModel(
+        model = model_creator(
             hparams=hparams,
             mode=tf.contrib.learn.ModeKeys.TRAIN,
             iterator=iterator,
@@ -304,7 +340,7 @@ class EvalModel(collections.namedtuple("EvalMode", ("graph", "model", "src_file_
     pass
 
 
-def create_eval_model(hparams, scope=None):
+def create_eval_model(model_creator, get_iterator, hparams, scope=None):
     """Create train graph, model, src/tgt file holders, and iterator."""
     vocab_file = hparams.vocab_file
     # Define the graph
@@ -319,7 +355,7 @@ def create_eval_model(hparams, scope=None):
         src_dataset = tf.contrib.data.TextLineDataset(src_file_placeholder)
         tgt_dataset = tf.contrib.data.TextLineDataset(tgt_file_placeholder)
         # Create the iterator for the dataset. We do not use skip_count here as we evaluate on the full file
-        iterator = iterator_utils.get_iterator(
+        iterator = get_iterator(
             src_dataset=src_dataset,
             tgt_dataset=tgt_dataset,
             vocab_table=vocab_table,
@@ -330,10 +366,10 @@ def create_eval_model(hparams, scope=None):
             random_seed=hparams.random_seed,
             num_buckets=hparams.num_buckets,
             src_max_len=hparams.src_max_len_infer,
-            tgt_max_len=hparams.tgt_max_len_infer
+            tgt_max_len=hparams.tgt_max_len_infer,
         )
         # Create a simple model
-        model = SimpleModel(
+        model = model_creator(
             hparams=hparams,
             iterator=iterator,
             mode=tf.contrib.learn.ModeKeys.EVAL,
@@ -525,6 +561,7 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
     utils.print_out("  Decoding sentence %d" % decode_id)
     # Format the random sentence into a batch_size of 1 format.
     sentence = [src_data[decode_id]]
+    print(sentence)
     # Create the feed-dict for the iterator
     iterator_feed_dict = {
         iterator_src_placeholder: sentence,
@@ -533,7 +570,6 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
     # Initialize the iterator
     sess.run(iterator.initializer, feed_dict=iterator_feed_dict)
     # Get the response. The summary is only used in attention models, which we do not use atm
-    # ToDo: adapt for architectures
     response, attention_summary = model.decode(sess)
 
     if hparams.beam_width > 0:
