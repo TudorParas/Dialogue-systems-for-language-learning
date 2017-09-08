@@ -196,6 +196,11 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
     if hparams.architecture == "simple":
         model_creator = SimpleModel
         get_infer_iterator = iterator_utils.get_infer_iterator
+
+        def update_dialogue(so_far, utterance, response):
+            # Dialogue so far does not matter
+            return utterance
+
     elif hparams.architecture == "hier":
         model_creator = HierarchicalModel
         # Parse some of the arguments now
@@ -203,6 +208,9 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
             end2end_iterator_utils.get_infer_iterator(dataset, vocab_table, batch_size, src_reverse, eos,
                                                       src_max_len=src_max_len, eou=hparams.eou,
                                                       dialogue_max_len=hparams.dialogue_max_len)
+        def update_dialogue(so_far, utterance, response):
+            # Dialogue so far is considered
+            return so_far + hparams.eou + response + utterance
     else:
         raise ValueError("Unkown architecture", hparams.architecture)
 
@@ -215,6 +223,7 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
                                                      session=sess, name="infer", verbose=False)
         utils.print_out("Welcome to ChatBro! If you have any better names please let me know.")
         dialogue_so_far = ""
+        response = ""
         # Leave it in chat mode until interrupted
         while True:
             # Read utterance from user.
@@ -222,7 +231,7 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
             # Preprocess it into the familiar format for the machine
             utterance = preprocessing_utils.tokenize_line(utterance, number_token=hparams.number_token,
                                                           name_token=hparams.name_token, gpe_token=hparams.gpe_token)
-            dialogue_so_far += (hparams.eou + utterance)
+            dialogue_so_far = update_dialogue(dialogue_so_far, utterance, response)
             # Transform it into a batch of size 1
             batched_dialogue = [dialogue_so_far]
             # Initialize the iterator
@@ -236,4 +245,3 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
                                            bpe_delimiter=hparams.bpe_delimiter, beam_width=hparams.beam_width,
                                            utterance=utterance, top_responses=hparams.top_responses, eos=hparams.eos,
                                            number_token=hparams.number_token, name_token=hparams.name_token)
-            dialogue_so_far += (hparams.eou + response)

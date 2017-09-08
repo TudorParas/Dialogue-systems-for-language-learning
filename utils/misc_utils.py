@@ -28,7 +28,7 @@ import tensorflow as tf
 
 
 
-def check_tensorflow_version():
+def check_tensorflow_version(version="1.2.1"):
     """Current code only works with version 1.2.1 or later"""
     if tf.__version__ < "1.2.1":
         raise EnvironmentError("Tensorflow version must >= 1.2.1")

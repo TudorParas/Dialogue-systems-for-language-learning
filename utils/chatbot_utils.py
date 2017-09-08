@@ -105,6 +105,7 @@ def decode_utterance(model, sess, output_file, bpe_delimiter, beam_width, uttera
             # Write the response and the utterance to file
             out_f.write("Human: %s\nChatbot: %s\n" % (utterance, response))
     print('ChatBro: ', response)
+    return response
 
 
 def postprocess_output(outputs, sentence_id, eos, bpe_delimiter,

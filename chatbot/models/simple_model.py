@@ -25,6 +25,7 @@ from chatbot.models.base_model import BaseModel
 
 import utils.misc_utils as utils
 from chatbot.models import model_helper
+from utils import iterator_utils
 
 utils.check_tensorflow_version()
 
@@ -101,7 +102,7 @@ class SimpleModel(BaseModel):
                     encoder_state = tuple(encoder_state)
             else:
                 raise ValueError("Unknown encoder_type %s" % hparams.encoder_type)
-        return encoder_outputs, encoder_state
+        return encoder_state
 
     def _build_bidirectional_rnn(self, inputs, sequence_length,
                                  dtype, hparams,
@@ -147,8 +148,7 @@ class SimpleModel(BaseModel):
 
         return encoder_outputs, bi_state
 
-    def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
-                            source_sequence_length):
+    def _build_decoder_cell(self, hparams, encoder_state):
         """Build an RNN cell that can be used by decoder."""
         # We only make use of encoder_outputs in attention-based models
 

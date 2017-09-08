@@ -55,8 +55,7 @@ class BaseModel(object):
         :param scope: scope of the model
 
         """
-        if not isinstance(iterator, iterator_utils.BatchedInput):
-            raise ValueError("Iterator has to be an instance of the BatchedInput class")
+
 
         self.iterator = iterator
         self.mode = mode
@@ -78,8 +77,14 @@ class BaseModel(object):
         # TODO: Only do this if the mode is TRAIN?
         # ToDo: initialize embeddings from word2vec
         self.init_embeddings(hparams, scope)
-        # Get the batch-size by testing the size of the first input
-        self.batch_size = tf.size(self.iterator.source_sequence_length)
+        # Get the batch-size by testing the size of the first input. We use shape in order to account
+        # for both types of iterators
+        if hparams.architecture == "hier":
+            self.batch_size = tf.shape(self.iterator.source_sequence_length)[0]
+        elif hparams.architecture == "simple":
+            self.batch_size = tf.size(self.iterator.source_sequence_length)
+        else:
+            raise ValueError("Unknown architecture %s" % hparams.architecture)
 
         # Create the densely-connected layer which will compute the output from the RNN cell.
         with tf.variable_scope(scope or "build_network"):
@@ -239,11 +244,11 @@ class BaseModel(object):
         num_gpus = hparams.num_gpus
         with tf.variable_scope(scope or "dynamic_seq2seq", dtype=dtype):
             # Encoder
-            encoder_outputs, encoder_state = self._build_encoder(hparams)
+            encoder_state = self._build_encoder(hparams)
 
             # Decoder
             logits, sample_id, final_context_state = self._build_decoder(
-                encoder_outputs, encoder_state, hparams)
+                encoder_state, hparams)
 
             # Loss
             if self.mode != tf.contrib.learn.ModeKeys.INFER:
@@ -266,7 +271,7 @@ class BaseModel(object):
           hparams: Hyperparameters configurations.
 
         Returns:
-          A tuple of encoder_outputs and encoder_state.
+          The  encoder_state.
         """
         pass
 
@@ -285,11 +290,10 @@ class BaseModel(object):
             base_gpu=base_gpu
         )
 
-    def _build_decoder(self, encoder_outputs, encoder_state, hparams):
+    def _build_decoder(self, encoder_state, hparams):
         """Build and run a RNN decoder with a final projection layer.
 
         Args:
-          encoder_outputs: The outputs of encoder for every time step.
           encoder_state: The final state of the encoder.
           hparams: The Hyperparameters configurations.
 
@@ -327,9 +331,7 @@ class BaseModel(object):
         with tf.variable_scope("decoder") as decoder_scope:
             cell, decoder_initial_state = self._build_decoder_cell(
                 hparams=hparams,
-                encoder_outputs=encoder_outputs,
-                encoder_state=encoder_state,
-                source_sequence_length=iterator.source_sequence_length
+                encoder_state=encoder_state
             )
 
             # Train or eval
@@ -450,15 +452,12 @@ class BaseModel(object):
         return logits, sample_id, final_context_state
 
     @abc.abstractmethod
-    def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
-                            source_sequence_length):
+    def _build_decoder_cell(self, hparams, encoder_state):
         """Subclass must implement this.
 
         Args:
           hparams: Hyperparameters configurations.
-          encoder_outputs: The outputs of encoder for every time step.
           encoder_state: The final state of the encoder.
-          source_sequence_length: sequence length of encoder_outputs.
 
         Returns:
           A tuple of a multi-layer RNN cell used by decoder

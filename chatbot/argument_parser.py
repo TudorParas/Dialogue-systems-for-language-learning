@@ -51,10 +51,7 @@ def add_arguments(parser):
     parser.add_argument("--architecture", type=str, default="simple",
                         help="simple | hier. If hier make sure to give the context hparams as well")
     # Hierarchical architecture hyperparameters
-    parser.add_argument("--context_num_units", type=int, default=32, help="Context cell hidden size")
     parser.add_argument("--context_num_layers", type=int, default=2, help="Depth of context cell")
-    parser.add_argument("--context_unit_type", type=str, default="lstm",
-                        help="lstm | gru | layer_norm_lstm")
 
     # Hyperparameters regarding the optimizer
     parser.add_argument("--optimizer", type=str, default="sgd", help="sgd | adam")
@@ -98,7 +95,7 @@ def add_arguments(parser):
                         help="Start-of-sentence symbol.")
     parser.add_argument("--eos", type=str, default="</s>",
                         help="End-of-sentence symbol.")
-    parser.add_argument("--eou", type=str, default="-eou-",
+    parser.add_argument("--eou", type=str, default="-EOU-",
                         help="Used in the hierarchical model to find the end of utterances")
     parser.add_argument("--number_token", type=str, default=None,
                         help="Token used to replace seen numbers")
@@ -119,7 +116,7 @@ def add_arguments(parser):
         Max length of tgt sequences during inference.  Also use to restrict the
         maximum decoding length.\
         """)
-    parser.add_argument("--dialogue_max_len", type=int, default=50, help="Max length of dialogue \
+    parser.add_argument("--dialogue_max_len", type=int, default=50, help="Max length of the inference dialogue \
                         during training. Used by the hierarchical model")
 
     # Default settings works well (rarely need to change)
@@ -226,9 +223,7 @@ def create_hparams(flags):
         architecture=flags.architecture,
 
         # Context cell settings
-        context_num_units=flags.context_num_units,
         context_num_layers=flags.context_num_layers,
-        context_unit_type=flags.context_unit_type,
 
         # Networks
         num_units=flags.num_units,

@@ -29,7 +29,7 @@ import tensorflow as tf
 
 from chatbot.models.simple_model import SimpleModel
 from chatbot.models.hier_model import HierarchicalModel
-from chatbot import inference_simple as inference
+from chatbot import inference
 from chatbot.models import model_helper
 from utils import iterator_utils
 from utils import end2end_iterator_utils

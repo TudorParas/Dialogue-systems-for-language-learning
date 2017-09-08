@@ -150,7 +150,7 @@ class IteratorUtilsTest(tf.test.TestCase):
                 tgt_seq_len
             )
             self.assertAllEqual(
-                [1, 2],  # Only one exchange
+                [1, 2],  # Only one exchange for the first one
                 diag_len
             )
 
