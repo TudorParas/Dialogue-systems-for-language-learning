@@ -210,7 +210,9 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
                                                       dialogue_max_len=hparams.dialogue_max_len)
         def update_dialogue(so_far, utterance, response):
             # Dialogue so far is considered
-            return so_far + hparams.eou + response + utterance
+            if response == "":
+                return utterance
+            return so_far + " " + hparams.eou + " " + response + " " + hparams.eou + " " +  utterance
     else:
         raise ValueError("Unkown architecture", hparams.architecture)
 
@@ -232,6 +234,7 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
             utterance = preprocessing_utils.tokenize_line(utterance, number_token=hparams.number_token,
                                                           name_token=hparams.name_token, gpe_token=hparams.gpe_token)
             dialogue_so_far = update_dialogue(dialogue_so_far, utterance, response)
+            print(dialogue_so_far)
             # Transform it into a batch of size 1
             batched_dialogue = [dialogue_so_far]
             # Initialize the iterator

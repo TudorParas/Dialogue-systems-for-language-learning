@@ -51,7 +51,6 @@ class HierarchicalModel(BaseModel):
 
         sequence_lengths = tf.transpose(iterator.source_sequence_length)  # shape=[dialogue_len, batch_size]
 
-
         with tf.variable_scope("encoder") as encoder_scope:
             dtype = encoder_scope.dtype
             if self.verbose:
@@ -67,7 +66,6 @@ class HierarchicalModel(BaseModel):
             context_cell = self._build_encoder_cell(hparams,
                                                     context_num_layers,
                                                     context_num_residual_layers)
-
 
             # Initialize the state using the current batch size
             current_batch_size = tf.shape(sources)[1]
@@ -91,7 +89,7 @@ class HierarchicalModel(BaseModel):
                     dtype=dtype,
                     time_major=self.time_major
                 )
-                # The encoder_state is a tuple. Get one of them
+                # The encoder_state is a tuple. Get one of them.
                 context_input = encoder_state[1]
 
                 output, next_state = context_cell(inputs=context_input, state=context_state, scope="context")
@@ -100,12 +98,13 @@ class HierarchicalModel(BaseModel):
 
             def condition(context_state, counter):
                 return tf.less(counter, tf.shape(sources)[0])
+
             # Initialize the counter
             counter = tf.Variable(0, name='counter', trainable=False, dtype=tf.int32, )
 
             # Create the while loop, filling the encoder_states list
             final_context_state, _ = tf.while_loop(cond=condition, body=body,
-                              loop_vars=[initial_state, counter])
+                                                   loop_vars=[initial_state, counter])
 
         return final_context_state
 

@@ -561,7 +561,6 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
     utils.print_out("  Decoding sentence %d" % decode_id)
     # Format the random sentence into a batch_size of 1 format.
     sentence = [src_data[decode_id]]
-    print(sentence)
     # Create the feed-dict for the iterator
     iterator_feed_dict = {
         iterator_src_placeholder: sentence,

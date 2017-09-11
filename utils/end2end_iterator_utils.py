@@ -50,58 +50,58 @@ def get_infer_iterator(dataset, vocab_table, batch_size,
     :param src_max_len: Maximum accepted length for utterance. Bigger inputs will be truncated.
     :param dialogue_max_len: Maximum accepted length for the dialogue.
     """
+    with tf.variable_scope("inference_iterator") as scope:
+        # Make dialogue_max_len represent only how many user utterances there are
+        # We use the eos token to pad the data
+        eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
+        # Split the dialogs into individual utterances.
+        dataset = dataset.map(lambda dialogue: tf.string_split([dialogue], eou).values)  # shape=[dialogue_length, ]
 
-    # Make dialogue_max_len represent only how many user utterances there are
-    # We use the eos token to pad the data
-    eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
-    # Split the dialogs into individual utterances.
-    dataset = dataset.map(lambda dialogue: tf.string_split([dialogue], eou).values)  # shape=[dialogue_length, ]
+        # Cut the dialogue short if we have a max length
+        if dialogue_max_len:
+            dataset = dataset.map(lambda dialogue: dialogue[:dialogue_max_len])
+        # Tokenize the utterances. This step also pads the matrices up to the length of the longest
+        # utterance in the matrix
+        dataset = dataset.map(lambda dialogue: string_split_dense(
+            dialogue, pad=eos))  # shape=[dialogue_length, utterance_length]
+        if src_max_len:
+            dataset = dataset.map(lambda dialogue: dialogue[:, :src_max_len])
+        # Get the integers mappings from the vocab_table. We also need to explicitly cast it
+        dataset = dataset.map(lambda dialogue: tf.cast(vocab_table.lookup(dialogue), tf.int32))
+        # Reverse the utterances if so states. We do so by reversing along the columns
+        if src_reverse:
+            dataset = dataset.map(lambda dialogue: tf.reverse(dialogue, axis=[1]))
+        # Get the length of the biggest utterance in the dialogue. Used to cap the length of the response
+        dataset = dataset.map(lambda dialogue: (dialogue, tf.shape(dialogue)[0]))
+        # Get the weights for the utterances (places which are padded are 0, the rest are 1)
+        dataset = dataset.map(lambda dialogue, dialogue_length: (dialogue,
+                                                                 tf.cast(tf.not_equal(dialogue, eos_id), tf.int32),
+                                                                 dialogue_length))
+        # Compute sequence lengths from the weights
+        dataset = dataset.map(lambda dialogue, weights, dialogue_length: (dialogue,
+                                                                          tf.cast(tf.count_nonzero(weights, axis=1),
+                                                                                  tf.int32),  # cast bc batch complain
+                                                                          dialogue_length))
 
-    # Cut the dialogue short if we have a max length
-    if dialogue_max_len:
-        dataset = dataset.map(lambda dialogue: dialogue[:dialogue_max_len])
-    # Tokenize the utterances. This step also pads the matrices up to the length of the longest
-    # utterance in the matrix
-    dataset = dataset.map(lambda dialogue: string_split_dense(
-        dialogue, pad=eos))  # shape=[dialogue_length, utterance_length]
-    if src_max_len:
-        dataset = dataset.map(lambda dialogue: dialogue[:, :src_max_len])
-    # Get the integers mappings from the vocab_table. We also need to explicitly cast it
-    dataset = dataset.map(lambda dialogue: tf.cast(vocab_table.lookup(dialogue), tf.int32))
-    # Reverse the utterances if so states. We do so by reversing along the columns
-    if src_reverse:
-        dataset = dataset.map(lambda dialogue: tf.reverse(dialogue, axis=[1]))
-    # Get the length of the biggest utterance in the dialogue. Used to cap the length of the response
-    dataset = dataset.map(lambda dialogue: (dialogue, tf.shape(dialogue)[0]))
-    # Get the weights for the utterances (places which are padded are 0, the rest are 1)
-    dataset = dataset.map(lambda dialogue, dialogue_length: (dialogue,
-                                                             tf.cast(tf.not_equal(dialogue, eos_id), tf.int32),
-                                                             dialogue_length))
-    # Compute sequence lengths from the weights
-    dataset = dataset.map(lambda dialogue, weights, dialogue_length: (dialogue,
-                                                                      tf.cast(tf.count_nonzero(weights, axis=1),
-                                                                              tf.int32),  # cast bc batch complain
-                                                                      dialogue_length))
+        def batching_func(x):
+            return x.padded_batch(
+                batch_size,
+                # The entry is the source line rows;
+                # this has unknown-length vectors.  The last entry is
+                # the source row size; this is a scalar.
+                padded_shapes=(tf.TensorShape([None, None]),  # src
+                               tf.TensorShape([None]),  # src_len
+                               tf.TensorShape([])),  # dialogue length
+                # Pad the source sequences with eos tokens.
+                # (Though notice we don't generally need to do this since
+                # later on we will be masking out calculations past the true sequence.
+                padding_values=(eos_id,  # src
+                                0,
+                                0))  # src_len -- unused
 
-    def batching_func(x):
-        return x.padded_batch(
-            batch_size,
-            # The entry is the source line rows;
-            # this has unknown-length vectors.  The last entry is
-            # the source row size; this is a scalar.
-            padded_shapes=(tf.TensorShape([None, None]),  # src
-                           tf.TensorShape([None]),  # src_len
-                           tf.TensorShape([])),  # dialogue length
-            # Pad the source sequences with eos tokens.
-            # (Though notice we don't generally need to do this since
-            # later on we will be masking out calculations past the true sequence.
-            padding_values=(eos_id,  # src
-                            0,
-                            0))  # src_len -- unused
-
-    dataset = batching_func(dataset)
-    iterator = dataset.make_initializable_iterator()
-    (ids, utt_length, diag_len) = iterator.get_next()
+        dataset = batching_func(dataset)
+        iterator = dataset.make_initializable_iterator()
+        (ids, utt_length, diag_len) = iterator.get_next()
     return End2EndBatchedInput(
         initializer=iterator.initializer,
         source=ids,  # shape=[batch_size, dialogue_max_len, src_max_len]
@@ -144,133 +144,133 @@ def get_iterator(src_dataset,
     :param skip_count: The number of elements of this dataset that should be skipped to form the new dataset.
     :return: An instance of BatchedIterator, which has the dialogue so far followed by the response.
     """
-    if not output_buffer_size:
-        output_buffer_size = batch_size * 1000
-    # Get the ids
-    sos_id = tf.cast(vocab_table.lookup(tf.constant(sos)), tf.int32)
-    eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
-    # Zip them together to create a single dataset
-    dataset = tf.contrib.data.Dataset.zip((src_dataset, tgt_dataset))
-    # Split the dialogs into individual utterances.
-    dataset = dataset.map(lambda src, tgt: (tf.string_split([src], eou).values,  # shape=[dialogue_length, ]
-                                            tgt),
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)
-
-
-    # Skip the first skip_count elements.
-    if skip_count is not None:
-        dataset = dataset.skip(count=skip_count)
-    # Shuffle the dataset.
-    dataset = dataset.shuffle(output_buffer_size, random_seed)
-
-    # Tokenize the utterances. This step also pads the matrices up to the length of the longest
-    # utterance in the matrix
-    dataset = dataset.map(lambda src, tgt: (string_split_dense(src, pad=eos),
-                                            tf.string_split([tgt]).values),
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)  # shape=[dialogue_length, utterance_length] tuple
-    # Apply the truncation for src length and target length if necessary
-    if src_max_len:
-        dataset = dataset.map(lambda src, tgt: (src[:, :src_max_len], tgt),
+    with tf.variable_scope("iterator") as scope:
+        if not output_buffer_size:
+            output_buffer_size = batch_size * 1000
+        # Get the ids
+        sos_id = tf.cast(vocab_table.lookup(tf.constant(sos)), tf.int32)
+        eos_id = tf.cast(vocab_table.lookup(tf.constant(eos)), tf.int32)
+        # Zip them together to create a single dataset
+        dataset = tf.contrib.data.Dataset.zip((src_dataset, tgt_dataset))
+        # Split the dialogs into individual utterances.
+        dataset = dataset.map(lambda src, tgt: (tf.string_split([src], eou).values,  # shape=[dialogue_length, ]
+                                                tgt),
                               num_threads=num_threads,
                               output_buffer_size=output_buffer_size)
-    if tgt_max_len:
-        dataset = dataset.map(lambda src, tgt: (src, tgt[:tgt_max_len]),
+
+        # Skip the first skip_count elements.
+        if skip_count is not None:
+            dataset = dataset.skip(count=skip_count)
+        # Shuffle the dataset.
+        dataset = dataset.shuffle(output_buffer_size, random_seed)
+
+        # Tokenize the utterances. This step also pads the matrices up to the length of the longest
+        # utterance in the matrix
+        dataset = dataset.map(lambda src, tgt: (string_split_dense(src, pad=eos),
+                                                tf.string_split([tgt]).values),
+                              num_threads=num_threads,
+                              output_buffer_size=output_buffer_size)  # shape=[dialogue_length, utterance_length] tuple
+        # Apply the truncation for src length and target length if necessary
+        if src_max_len:
+            dataset = dataset.map(lambda src, tgt: (src[:, :src_max_len], tgt),
+                                  num_threads=num_threads,
+                                  output_buffer_size=output_buffer_size)
+        if tgt_max_len:
+            dataset = dataset.map(lambda src, tgt: (src, tgt[:tgt_max_len]),
+                                  num_threads=num_threads,
+                                  output_buffer_size=output_buffer_size)
+        # Reverse the source
+        if src_reverse:
+            dataset = dataset.map(lambda src, tgt: (tf.reverse(src, axis=[1]), tgt))
+        # Convert the word strings to ids.  Word strings that are not in the
+        # vocab get the lookup table's default_value integer. We do it after the split because
+        # we don't want to pad the target up to the size of the source
+        dataset = dataset.map(lambda src, tgt: (tf.cast(vocab_table.lookup(src), tf.int32),
+                                                tf.cast(vocab_table.lookup(tgt), tf.int32)),
                               num_threads=num_threads,
                               output_buffer_size=output_buffer_size)
-    # Reverse the source
-    if src_reverse:
-        dataset = dataset.map(lambda src, tgt: (tf.reverse(src, axis=[1]), tgt))
-    # Convert the word strings to ids.  Word strings that are not in the
-    # vocab get the lookup table's default_value integer. We do it after the split because
-    # we don't want to pad the target up to the size of the source
-    dataset = dataset.map(lambda src, tgt: (tf.cast(vocab_table.lookup(src), tf.int32),
-                                            tf.cast(vocab_table.lookup(tgt), tf.int32)),
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)
-    # Create a tgt_input prefixed with <sos> and a tgt_output suffixed with <eos>.
-    dataset = dataset.map(lambda src, tgt: (src,
-                                            tf.concat(([sos_id], tgt), axis=0),   # target input
-                                            tf.concat((tgt, [eos_id]), axis=0)),  # target output, the input shifted
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)
-    # Get the length of the dialogue. Source is always longer than target
-    dataset = dataset.map(lambda src, tgt_in, tgt_out: (src,
-                                                        tgt_in,
-                                                        tgt_out,
-                                                        tf.shape(src)[0]),  # len of the dialogue
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)
-    # Get the weights for the source. The source weights will be used to compute sequence lengths.
-    dataset = dataset.map(lambda src, tgt_in, tgt_out, diag_len: (src,
-                                                                  tgt_in,
-                                                                  tgt_out,
-                                                                  tf.cast(tf.not_equal(src, eos_id), tf.int32),
-                                                                  diag_len),
-                          num_threads=num_threads,
-                          output_buffer_size=output_buffer_size)
-    # Get the sequence lengths.
-    dataset = dataset.map(lambda src, tgt_in, tgt_out, src_weights, diag_len: (
-        src,
-        tgt_in,
-        tgt_out,
-        tf.cast(tf.count_nonzero(src_weights, axis=1), tf.int32),
-        tf.size(tgt_in),
-        diag_len
-    ))
+        # Create a tgt_input prefixed with <sos> and a tgt_output suffixed with <eos>.
+        dataset = dataset.map(lambda src, tgt: (src,
+                                                tf.concat(([sos_id], tgt), axis=0),  # target input
+                                                tf.concat((tgt, [eos_id]), axis=0)),  # target output, the input shifted
+                              num_threads=num_threads,
+                              output_buffer_size=output_buffer_size)
+        # Get the length of the dialogue. Source is always longer than target
+        dataset = dataset.map(lambda src, tgt_in, tgt_out: (src,
+                                                            tgt_in,
+                                                            tgt_out,
+                                                            tf.shape(src)[0]),  # len of the dialogue
+                              num_threads=num_threads,
+                              output_buffer_size=output_buffer_size)
+        # Get the weights for the source. The source weights will be used to compute sequence lengths.
+        dataset = dataset.map(lambda src, tgt_in, tgt_out, diag_len: (src,
+                                                                      tgt_in,
+                                                                      tgt_out,
+                                                                      tf.cast(tf.not_equal(src, eos_id), tf.int32),
+                                                                      diag_len),
+                              num_threads=num_threads,
+                              output_buffer_size=output_buffer_size)
+        # Get the sequence lengths.
+        dataset = dataset.map(lambda src, tgt_in, tgt_out, src_weights, diag_len: (
+            src,
+            tgt_in,
+            tgt_out,
+            tf.cast(tf.count_nonzero(src_weights, axis=1), tf.int32),
+            tf.size(tgt_in),
+            diag_len
+        ))
 
-    # Bucket by source sequence length (buckets for lengths 0-9, 10-19, ...).
-    # Shape becomes [batch_size, dialogue_max_length, utterance_max_len]
-    def batching_func(x):
-        return x.padded_batch(
-            batch_size,
-            # The first three entries are the source and target line rows;
-            # these have unknown-length vectors.  The last two entries are
-            # the source and target row sizes; these are scalars.
-            padded_shapes=(tf.TensorShape([None, None]),  # src
-                           tf.TensorShape([None]),  # tgt_input
-                           tf.TensorShape([None]),  # tgt_output
-                           tf.TensorShape([None]),  # src_len
-                           tf.TensorShape([]),  # tgt_len
-                           tf.TensorShape([])),  # dialogue length
-            # Pad the source and target sequences with eos tokens.
-            # (Though notice we don't generally need to do this since
-            # later on we will be masking out calculations past the true sequence.
-            padding_values=(eos_id,  # src
-                            eos_id,  # tgt_input
-                            eos_id,  # tgt_output
-                            0,  # src_len
-                            0,  # tgt_len
-                            0))  # diag_len -- unused
+        # Bucket by source sequence length (buckets for lengths 0-9, 10-19, ...).
+        # Shape becomes [batch_size, dialogue_max_length, utterance_max_len]
+        def batching_func(x):
+            return x.padded_batch(
+                batch_size,
+                # The first three entries are the source and target line rows;
+                # these have unknown-length vectors.  The last two entries are
+                # the source and target row sizes; these are scalars.
+                padded_shapes=(tf.TensorShape([None, None]),  # src
+                               tf.TensorShape([None]),  # tgt_input
+                               tf.TensorShape([None]),  # tgt_output
+                               tf.TensorShape([None]),  # src_len
+                               tf.TensorShape([]),  # tgt_len
+                               tf.TensorShape([])),  # dialogue length
+                # Pad the source and target sequences with eos tokens.
+                # (Though notice we don't generally need to do this since
+                # later on we will be masking out calculations past the true sequence.
+                padding_values=(eos_id,  # src
+                                eos_id,  # tgt_input
+                                eos_id,  # tgt_output
+                                0,  # src_len
+                                0,  # tgt_len
+                                0))  # diag_len -- unused
 
-    if num_dialogue_buckets > 1:
-        def key_func(unused_1, unused_2, unused_3, unused_4, unused_5, dialogue_len):
-            # Pairs with length [0, bucket_width) go to bucket 0, length
-            # [bucket_width, 2 * bucket_width) go to bucket 1, etc.  Pairs with length
-            # over ((num_bucket-1) * bucket_width) words all go into the last bucket.
-            # If there is a max length find the width so that we equally split data in buckets.
-            # Calculate bucket_width by maximum source sequence length.
-            bucket_width = 3
+        if num_dialogue_buckets > 1:
+            def key_func(unused_1, unused_2, unused_3, unused_4, unused_5, dialogue_len):
+                # Pairs with length [0, bucket_width) go to bucket 0, length
+                # [bucket_width, 2 * bucket_width) go to bucket 1, etc.  Pairs with length
+                # over ((num_bucket-1) * bucket_width) words all go into the last bucket.
+                # If there is a max length find the width so that we equally split data in buckets.
+                # Calculate bucket_width by maximum source sequence length.
+                bucket_width = 3
 
-            # Bucket sentence pairs by the length of their source sentence and target sentence.
-            bucket_id = dialogue_len // bucket_width
+                # Bucket sentence pairs by the length of their source sentence and target sentence.
+                bucket_id = dialogue_len // bucket_width
 
-            return tf.to_int64(tf.minimum(num_dialogue_buckets, bucket_id))
+                return tf.to_int64(tf.minimum(num_dialogue_buckets, bucket_id))
 
-        def reduce_func(unused_key, windowed_data):
-            return batching_func(windowed_data)
+            def reduce_func(unused_key, windowed_data):
+                return batching_func(windowed_data)
 
-        # Maps each consecutive elements in this dataset to a key using key_func to at
-        # most window_size elements matching the same key.
-        dataset = dataset.group_by_window(
-            key_func=key_func, reduce_func=reduce_func, window_size=batch_size
-        )
-    else:
-        dataset = batching_func(dataset)
+            # Maps each consecutive elements in this dataset to a key using key_func to at
+            # most window_size elements matching the same key.
+            dataset = dataset.group_by_window(
+                key_func=key_func, reduce_func=reduce_func, window_size=batch_size
+            )
+        else:
+            dataset = batching_func(dataset)
 
-    iterator = dataset.make_initializable_iterator()
-    (src, tgt_in, tgt_out, src_seq_len, tgt_seq_len, dialogue_len) = iterator.get_next()
+        iterator = dataset.make_initializable_iterator()
+        (src, tgt_in, tgt_out, src_seq_len, tgt_seq_len, dialogue_len) = iterator.get_next()
     return End2EndBatchedInput(
         initializer=iterator.initializer,
         source=src,  # shape=[batch_size, ceil(dialogue_max_len / 2), src_max_len]

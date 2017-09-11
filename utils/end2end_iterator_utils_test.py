@@ -55,7 +55,8 @@ class IteratorUtilsTest(tf.test.TestCase):
         tgt_max_len = 2
         skip_count = None
 
-        iterator = end2end_iterator_utils.get_iterator(src_dataset,tgt_dataset, vocab_table, batch_size, sos, eos, eou, src_reverse,
+        iterator = end2end_iterator_utils.get_iterator(src_dataset, tgt_dataset, vocab_table, batch_size, sos, eos, eou,
+                                                       src_reverse,
                                                        random_seed, num_buckets, src_max_len,
                                                        tgt_max_len, skip_count=skip_count)
         source = iterator.source
@@ -117,7 +118,7 @@ class IteratorUtilsTest(tf.test.TestCase):
 
             # Get next batch
             (src_eval, tgt_in, tgt_out, src_seq_len, tgt_seq_len, diag_len) = sess.run((
-                source, target_in, target_out,  source_len, target_len, dialogue_len))
+                source, target_in, target_out, source_len, target_len, dialogue_len))
 
             self.assertAllEqual(
                 [[[0, 4],  # a pad
@@ -146,7 +147,7 @@ class IteratorUtilsTest(tf.test.TestCase):
                 src_seq_len
             )
             self.assertAllEqual(
-                [2, 3],   # we count padding as well
+                [2, 3],  # we count padding as well
                 tgt_seq_len
             )
             self.assertAllEqual(
@@ -195,7 +196,7 @@ class IteratorUtilsTest(tf.test.TestCase):
             )
             self.assertAllEqual(
                 [[3, 1],
-                [2, 1]],
+                 [2, 1]],
                 seq_len_eval
             )
             self.assertAllEqual(

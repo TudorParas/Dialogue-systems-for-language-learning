@@ -33,7 +33,7 @@ def question_answers(conversations):
 
 
 
-def prepare_dataset(questions, answers, processed_dir_path, val_test_fraction=0.02):
+def prepare_dataset(questions, answers, processed_dir_path, val_test_fraction=0.2):
     # create path to store all the train & validation & test encoder & decoder
     base.make_dir(processed_dir_path)
 
