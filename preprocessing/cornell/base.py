@@ -20,9 +20,11 @@ https://github.com/chiphuyen/stanford-tensorflow-tutorials/blob/master/assignmen
 
 import os
 from utils.preprocessing_utils import make_dir
+from utils.misc_utils import get_parent_dir
 
-
-DATA_PATH = os.path.abspath('../../data/cornell')
+FILE_PATH = os.path.abspath(__file__)
+DATA_PATH = os.path.join(get_parent_dir(get_parent_dir(get_parent_dir(FILE_PATH))),
+                        'data/cornell')
 LINE_FILE = "movie_lines.txt"
 PROCESSED_DIR_PATH = os.path.join(DATA_PATH, 'processed')
 CONVO_FILE = 'movie_conversations.txt'

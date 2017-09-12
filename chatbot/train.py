@@ -586,7 +586,7 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
 
 
 def _internal_eval(model, global_step, sess, iterator, iterator_feed_dict, summary_writer, label):
-    """Used to complute perplexity on the dataset provided through the iterator"""
+    """Used to compute perplexity on the dataset provided through the iterator"""
     # Initialize the iterator using the feed dict
     sess.run(iterator.initializer, feed_dict=iterator_feed_dict)
     # Compute the perplexity

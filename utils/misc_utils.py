@@ -173,3 +173,5 @@ def format_bpe_text(symbols, delimiter=b"@@"):
             word = b""
     return b" ".join(words).decode(encoding='utf8')
 
+def get_parent_dir(path):
+    return os.path.split(path)[0]

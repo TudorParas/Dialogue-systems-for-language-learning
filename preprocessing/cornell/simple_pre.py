@@ -18,9 +18,6 @@ for use in the simple model
 """
 
 import os
-import sys
-
-sys.path.append(os.getcwd())
 
 from preprocessing import simple
 import preprocessing.cornell.base as base

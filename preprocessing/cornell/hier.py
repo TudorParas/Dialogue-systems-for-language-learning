@@ -18,10 +18,7 @@ for use in the hierarchical model
 """
 
 import os
-import sys
 from preprocessing import hier
-
-sys.path.append(os.getcwd())
 
 from preprocessing import simple
 import preprocessing.cornell.base as base
