@@ -135,7 +135,8 @@ def load_data(inference_input_file, lines_read=2000, hparams=None):
         if hparams and hparams.inference_indices:
             inference_data = [index for index in hparams.inference_indices]
         else:
-            inference_data = random.sample(inference_data, lines_read)
+            # Temporary solution so that it doesn't take forever to test
+            inference_data = inference_data[:lines_read]
 
         return inference_data
 
@@ -149,9 +150,22 @@ def inference(checkpoint, inference_input_file, inference_output_file,
     # Read the data
     infer_data = load_data(inference_input_file, hparams)
 
+    if hparams.architecture == "simple":
+        model_creator = SimpleModel
+        get_infer_iterator = iterator_utils.get_infer_iterator
+
+    elif hparams.architecture == "hier":
+        model_creator = HierarchicalModel
+        # Parse some of the arguments now
+        get_infer_iterator = lambda dataset, vocab_table, batch_size, src_reverse, eos, src_max_len: \
+            end2end_iterator_utils.get_infer_iterator(dataset, vocab_table, batch_size, src_reverse, eos,
+                                                      src_max_len=src_max_len, eou=hparams.eou,
+                                                      dialogue_max_len=hparams.dialogue_max_len)
+    else:
+        raise ValueError("Unkown architecture", hparams.architecture)
 
     # Containing the graph, model, source placeholder, batch_size placeholder and iterator
-    infer_model = create_infer_model(hparams, scope)
+    infer_model = create_infer_model(model_creator, get_infer_iterator, hparams, scope)
     # ToDo: adapt for architectures
     with tf.Session(graph=infer_model.graph, config=utils.get_config_proto()) as sess:
         # Load the model from the checkpoint
