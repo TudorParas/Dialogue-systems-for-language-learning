@@ -56,7 +56,6 @@ class BaseModel(object):
 
         """
 
-
         self.iterator = iterator
         self.mode = mode
         self.vocab_table = vocab_table
@@ -74,7 +73,6 @@ class BaseModel(object):
                                                     seed=hparams.random_seed)
         tf.get_variable_scope().set_initializer(initializer=initializer)
 
-        # TODO: Only do this if the mode is TRAIN?
         # ToDo: initialize embeddings from word2vec
         self.init_embeddings(hparams, scope)
         # Get the batch-size by testing the size of the first input. We use shape in order to account
@@ -473,26 +471,27 @@ class BaseModel(object):
     def _compute_loss(self, logits):
         target_output = self.iterator.target_output  # shape=[batch_size, max_time]
         # Get the length of the batch
-        if self.time_major:
-            target_output = tf.transpose(target_output)  # shape=[max_time, batch_size]
-        max_time = self.get_max_time(target_output)
-        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=target_output,
-            logits=logits
-        )
-        # Used to negate the loss we get from the paddings
-        target_weights = tf.sequence_mask(
-            lengths=self.iterator.target_sequence_length,
-            maxlen=max_time,
-            dtype=logits.dtype
-        )
+        with tf.variable_scope('loss') as scope:
+            if self.time_major:
+                target_output = tf.transpose(target_output)  # shape=[max_time, batch_size]
+            max_time = self.get_max_time(target_output)
+            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=target_output,
+                logits=logits
+            )
+            # Used to negate the loss we get from the paddings
+            target_weights = tf.sequence_mask(
+                lengths=self.iterator.target_sequence_length,
+                maxlen=max_time,
+                dtype=logits.dtype
+            )
 
-        if self.time_major:
-            target_weights = tf.transpose(target_weights)
-        # Multiply it by the weights in order to invalidate the effect of the padding
-        # Get the average loss for the batch
-        loss = tf.reduce_sum(
-            cross_entropy * target_weights) / tf.to_float(self.batch_size)
+            if self.time_major:
+                target_weights = tf.transpose(target_weights)
+            # Multiply it by the weights in order to invalidate the effect of the padding
+            # Get the average loss for the batch
+            loss = tf.reduce_sum(
+                cross_entropy * target_weights) / tf.to_float(self.batch_size)
         return loss
 
     def _get_infer_summary(self, hparams):

@@ -78,7 +78,7 @@ class HierarchicalModel(BaseModel):
                 if self.time_major:
                     source = tf.transpose(source)  # [max_time, batch_size]
 
-                seq_len = tf.gather(sequence_lengths, counter)
+                seq_len = tf.gather(sequence_lengths, counter, name='get_current_source')
                 encoder_emb_inp = tf.nn.embedding_lookup(
                     self.embeddings, source)
                 # Create RNN. Performs fully dynamic unrolling of inputs
@@ -87,20 +87,21 @@ class HierarchicalModel(BaseModel):
                     inputs=encoder_emb_inp,
                     sequence_length=seq_len,
                     dtype=dtype,
-                    time_major=self.time_major
+                    time_major=self.time_major,
                 )
-                # The encoder_state is a tuple. Get one of them.
-                context_input = encoder_state[1]
+                # The encoder_state is a tuple. (cell state, memory state), aka (c, h).
+                # Use the cell state as input.
+                context_input = encoder_state[0]
 
                 output, next_state = context_cell(inputs=context_input, state=context_state, scope="context")
 
-                return [next_state, tf.add(counter, 1)]
+                return [next_state, tf.add(counter, 1, name='increment_counter')]
 
             def condition(context_state, counter):
-                return tf.less(counter, tf.shape(sources)[0])
+                return tf.less(counter, tf.shape(sources)[0], name='condition')
 
             # Initialize the counter
-            counter = tf.Variable(0, name='counter', trainable=False, dtype=tf.int32, )
+            counter = tf.Variable(0, name='counter', trainable=False, dtype=tf.int32)
 
             # Create the while loop, filling the encoder_states list
             final_context_state, _ = tf.while_loop(cond=condition, body=body,

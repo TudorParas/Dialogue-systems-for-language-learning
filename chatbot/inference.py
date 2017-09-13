@@ -33,7 +33,7 @@ from utils import misc_utils as utils
 from utils import chatbot_utils
 from utils import vocab_utils
 from utils import preprocessing_utils
-
+from assessment.input_assessment import get_user_input
 
 class InferModel(
     collections.namedtuple("InferModel",
@@ -229,12 +229,11 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
         # Leave it in chat mode until interrupted
         while True:
             # Read utterance from user.
-            utterance = chatbot_utils.get_user_input()
+            utterance = get_user_input()
             # Preprocess it into the familiar format for the machine
             utterance = preprocessing_utils.tokenize_line(utterance, number_token=hparams.number_token,
                                                           name_token=hparams.name_token, gpe_token=hparams.gpe_token)
             dialogue_so_far = update_dialogue(dialogue_so_far, utterance, response)
-            print(dialogue_so_far)
             # Transform it into a batch of size 1
             batched_dialogue = [dialogue_so_far]
             # Initialize the iterator
