@@ -37,7 +37,7 @@ NAME_TOKEN = '<person>'
 # Not using the gpe
 GPE_TOKEN = None
 
-VOCAB_SIZE = 10000
+VOCAB_SIZE = 15000
 
 
 def prepare_raw_data():
@@ -46,6 +46,8 @@ def prepare_raw_data():
     conversations = base.load_conversations()
     tokenized_conv = preprocessing_utils.tokenize_conversations(conversations, number_token=NUMBER_TOKEN,
                                                                 name_token=NAME_TOKEN, gpe_token=GPE_TOKEN)
+    # Trim every utterance to a max of 30 words
+    tokenized_conv = [[" ".join(line.split()[:30]) for line in dialogue] for dialogue in tokenized_conv]
     previous_dialogues, answers = hier.dialogue_response(tokenized_conv, EOU)
     src_file = simple.prepare_dataset(previous_dialogues, answers, PROCESSED_DIR_PATH)
     preprocessing_utils.create_vocab(src_file, out_dir=PROCESSED_DIR_PATH,

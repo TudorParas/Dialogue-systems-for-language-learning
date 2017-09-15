@@ -21,14 +21,22 @@ def dialogue_response(conversations, EOU, max_conv_length=4):
     previous_dialogues, answers = [], []
     for convo in conversations:
         dialogue_so_far = []
+        if not valid_conversation(convo):
+            continue
+        # Check if the conversation has blank utterances
         for index in range(len(convo) - 1):
             dialogue_so_far .append("%s%s" % (convo[index], EOU))
             # Trim it to max_conv_length
             dialogue_so_far = dialogue_so_far[-max_conv_length:]
-            # Remove the EOU from the last utteranceg
-            previous_dialogues.append("".join(dialogue_so_far[:-1] + [dialogue_so_far[-1].split(EOU)[0]]))
+            # Remove the EOU from the last utterance
+            dialogue_so_far_trimmed = "".join(dialogue_so_far[:-1] + [dialogue_so_far[-1].split(EOU)[0]])
+            previous_dialogues.append(dialogue_so_far_trimmed)
             answers.append(convo[index + 1])
 
-
-    assert len(previous_dialogues) == len(answers)
     return previous_dialogues, answers
+
+def valid_conversation(conv):
+    for line in conv:
+        if line == '':
+            return False
+    return True

@@ -66,7 +66,7 @@ class HierarchicalModel(BaseModel):
             context_cell = self._build_encoder_cell(hparams,
                                                     context_num_layers,
                                                     context_num_residual_layers)
-
+            max_dialogue_length = tf.shape(sources)[0]
             # Initialize the state using the current batch size
             current_batch_size = tf.shape(sources)[1]
             initial_state = context_cell.zero_state(current_batch_size, dtype=dtype)
@@ -98,7 +98,7 @@ class HierarchicalModel(BaseModel):
                 return [next_state, tf.add(counter, 1, name='increment_counter')]
 
             def condition(context_state, counter):
-                return tf.less(counter, tf.shape(sources)[0], name='condition')
+                return tf.less(counter, max_dialogue_length, name='condition')
 
             # Initialize the counter
             counter = tf.Variable(0, name='counter', trainable=False, dtype=tf.int32)
