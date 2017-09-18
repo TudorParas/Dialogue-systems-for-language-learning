@@ -1,5 +1,5 @@
 #                          Dialogue systems for language learning
-			
+            
 What is it?
 -----------
   
@@ -35,7 +35,7 @@ Make sure you're in the root directory again and run the script 'simple_pre.py' 
 Training
 --------
   
-To begin training run 'chatbot/run.py' using the arguments:
+To begin training a simple nmt model run 'chatbot/run.py' using the arguments:
   
         --src=enc --tgt=dec \
         --vocab_file="<repo-path>\data\cornell\processed\nmt\vocab"  \
@@ -49,6 +49,25 @@ To begin training run 'chatbot/run.py' using the arguments:
         --num_units=128 \
         --dropout=0.2 \
         --metrics=bleu
+        
+To begin training a hierarchical model run 'chatbot/run.py' using the arguments:
+
+    --src=enc --tgt=dec \
+    --vocab_file="<repo-path>\data\cornell\processed\nmt\vocab"  \
+    --train_prefix="<repo-path>\data\cornell\processed\nmt\train" \
+    --dev_prefix="<repo-path>\data\cornell\processed\nmt\val"  \
+    --test_prefix="<repo-path>\data\cornell\processed\nmt\test" \
+    --out_dir="<repo-path>\output\cornell" \
+    --num_train_steps=12000 \
+    --steps_per_stats=100 \
+    --num_layers=2 \
+    --num_units=128 \
+    --dropout=0.2 \
+    --metrics=bleu \
+    --architecture=hier \
+    --context_num_layers=2
+        
+
         
 This will run the training for 12000 iterations. The hyperparameters used are the standard ones from the NMT guide. The following hyperparameters can be tweaked to change the model:
     
@@ -66,6 +85,7 @@ This will run the training for 12000 iterations. The hyperparameters used are th
     num_buckets: Number of bucket in which we put data of similar length.
     num_gpus: Number of GPUs of the machine. Default is 1.
     metrics: Comma-separated list of evaluations. Can be bleu,rouge,accuracy.
+    context_num_layer: The number of layers of the context encoder.
     
 For more information all the arguments are parsed in the 'chatbot/argument_parser.py' file.
 
@@ -76,6 +96,7 @@ To chat with your model run it with the arguments:
     --chat=True \
     --chat_logs_output_file="<repo-path>\output\cornell\chat_logs.txt" \
     --out_dir="<repo-path>\Chatbot\output\cornell" \
+    --architecture=hier \
     --beam_width=5 \
     --top_responses=3 \
     --number_token=<number> \
