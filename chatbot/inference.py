@@ -33,7 +33,7 @@ from utils import misc_utils as utils
 from utils import chatbot_utils
 from utils import vocab_utils
 from utils import preprocessing_utils
-from assessment.input_assessment import get_user_input
+from assessment.input_assessment import get_user_input, overall_score
 
 class InferModel(
     collections.namedtuple("InferModel",
@@ -125,7 +125,7 @@ def _decode_inference_indices(model, sess,
             utils.print_out("%s\n" % response)
     utils.print_time("  done", start_time)
 
-def load_data(inference_input_file, lines_read=2000, hparams=None):
+def load_data(inference_input_file, lines_read=1000000, hparams=None):
     """
     Load inference data from file. The lines read argument makes it so that we don't test on everything.
     """
@@ -237,13 +237,20 @@ def chat(checkpoint, chat_logs_output_file, hparams, scope=None):
         # ToDo: adapt for architectures
         loaded_infer_model = model_helper.load_model(model=infer_model.model, ckpt=checkpoint,
                                                      session=sess, name="infer", verbose=False)
-        utils.print_out("Welcome to ChatBro! If you have any better names please let me know.")
+        utils.print_out("I'm Batman!")
         dialogue_so_far = ""
         response = ""
+        # Gather all the user's utterances
+        user_utterances = []
         # Leave it in chat mode until interrupted
         while True:
             # Read utterance from user.
-            utterance = get_user_input()
+            utterance, original_utterance = get_user_input(hparams)
+            # Check if we should finish
+            if utterance == 'end()':
+                overall_score(user_utterances, hparams)
+                break
+            user_utterances.append(original_utterance)
             # Preprocess it into the familiar format for the machine
             utterance = preprocessing_utils.tokenize_line(utterance, number_token=hparams.number_token,
                                                           name_token=hparams.name_token, gpe_token=hparams.gpe_token)

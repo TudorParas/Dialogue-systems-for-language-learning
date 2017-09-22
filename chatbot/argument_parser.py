@@ -204,6 +204,11 @@ def add_arguments(parser):
           """))
     parser.add_argument("--length_penalty_weight", type=float, default=0.0,
                         help="Length penalty for beam search.")
+    # Assessment
+    parser.add_argument("--UNAME", type=str, default=None,
+                        help="Username for write and improve")
+    parser.add_argument("--TOKEN", type=str, default=None,
+                        help="Token for write and improve")
 
 
 def create_hparams(flags):
@@ -281,6 +286,10 @@ def create_hparams(flags):
         metrics=flags.metrics.split(","),
         log_device_placement=flags.log_device_placement,
         random_seed=flags.random_seed,
+
+        # Assessment
+        UNAME=flags.UNAME,
+        TOKEN=flags.TOKEN
     )
 
 
@@ -362,7 +371,7 @@ def ensure_compatible_hparams(hparams, default_hparams, flags):
     updated_keys = [
         "out_dir", "num_gpus", "test_prefix", "beam_width",
         "length_penalty_weight", "num_train_steps", "number_token",
-        "name_token", "gpe_token"
+        "name_token", "gpe_token", "UNAME", "TOKEN"
     ]
     for key in updated_keys:
         if key in default_config and getattr(hparams, key) != default_config[key]:
